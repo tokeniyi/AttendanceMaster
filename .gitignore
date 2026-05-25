@@ -10,6 +10,9 @@
 !.yarn/releases
 !.yarn/versions
 
+
+attendance-master.json
+
 # testing
 /coverage
 
