@@ -3,25 +3,21 @@
  * ============================================================================
  * PURPOSE
  * ----------------------------------------------------------------------------
- * This file acts as a client-server bridge for Google Document AI integration.
+ * This file acts as the server-side processor for Google Document AI integration.
  * It replaces the previous weak in-browser Tesseract OCR with an enterprise-grade
  * document reconstruction pipeline.
  *
- * It dynamically resolves client/server execution to:
- *  1. Server Side: Process files using `@google-cloud/documentai` directly.
- *  2. Client Side: Upload documents to Next.js route `/api/ocr` to avoid bundling
- *     Node libraries or exposing private GCP credentials in the browser.
+ * This server-side implementation processes documents directly using `@google-cloud/documentai`.
  * ============================================================================
  */
 
+import { DocumentProcessorServiceClient } from "@google-cloud/documentai";
+import fs from "fs";
+import path from "path";
 import {
   analyseDocument,
-  classifyRow,
-  inferColumnSchema,
   type SemanticDocument
 } from '@/lib/semanticAnalyzer';
-
-import { validateRow } from '@/lib/dataCorrector';
 import { extractTables, extractLines } from '@/lib/documentParser';
 
 export type { SemanticDocument };
@@ -110,26 +106,12 @@ export interface OCRLine {
 }
 
 /**
- * Progress callback used by UI layer.
- */
-export type ProgressCallback = (
-  message: string,
-  percent: number
-) => void;
-
-/**
  * processDocument()
  * ============================================================================
  * SERVER-SIDE ONLY: Calls Google Document AI using base64 encoded input.
- * Dynamic imports are used to prevent client bundle compile errors.
  * ============================================================================
  */
 export async function processDocument(filePath: string, mimeType?: string) {
-  // Use dynamic imports to keep Node.js libraries out of the client bundle
-  const { DocumentProcessorServiceClient } = await import("@google-cloud/documentai");
-  const fs = await import("fs");
-  const path = await import("path");
-
   const projectId = process.env.GOOGLE_PROJECT_ID;
   const location = process.env.GOOGLE_LOCATION;
   const processorId = process.env.GOOGLE_PROCESSOR_ID;
@@ -245,63 +227,4 @@ export async function performServerOCR(filePath: string, mimeType?: string): Pro
 
   // Return non-empty rows
   return semantic.rows.filter(r => r.region !== 'empty');
-}
-
-/**
- * performOCR()
- * ============================================================================
- * MAIN OCR PIPELINE ENTRY POINT (CLIENT & SERVER SENSITIVE)
- * ============================================================================
- */
-export async function performOCR(
-  image: string | File,
-  onProgress?: ProgressCallback
-): Promise<OCRLine[]> {
-  // If running on the server, delegate directly to performServerOCR
-  if (typeof window === "undefined") {
-    throw new Error("performOCR expects client context when executed directly. For server-side usage, call performServerOCR.");
-  }
-
-  onProgress?.("Uploading document to Google Document AI…", 10);
-
-  try {
-    let fileToUpload: File;
-
-    if (typeof image === "string") {
-      onProgress?.("Fetching image resource…", 15);
-      const response = await fetch(image);
-      const blob = await response.blob();
-      fileToUpload = new File([blob], "document.png", { type: blob.type || "image/png" });
-    } else {
-      fileToUpload = image;
-    }
-
-    onProgress?.("Analyzing layout using Document AI…", 40);
-
-    // Create payload
-    const formData = new FormData();
-    formData.append("file", fileToUpload);
-
-    // POST to local API Route
-    const response = await fetch("/api/ocr", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`OCR processing failed: ${errText || response.statusText}`);
-    }
-
-    onProgress?.("Reconstructing database spreadsheet…", 85);
-
-    const results: OCRLine[] = await response.json();
-
-    onProgress?.("Analysis complete!", 100);
-    return results;
-  } catch (error: any) {
-    console.error("Client-side performOCR failure:", error);
-    onProgress?.(`Error: ${error.message || "Failed processing"}`, 100);
-    throw error;
-  }
 }

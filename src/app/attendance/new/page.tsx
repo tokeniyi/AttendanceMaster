@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Upload, Database, ArrowRight, Zap, FileImage, CheckCircle2 } from "lucide-react";
-import { performOCR } from "@/OCR/ocrService";
+import { performOCR } from "@/OCR/ocrClient";
 import { matchMembers } from "@/matching/matchEngine";
 import { supabase } from "@/lib/supabase";
 import { Member, Correction } from "@/types";
