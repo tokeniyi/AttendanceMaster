@@ -6,6 +6,7 @@ import { performOCR } from "@/OCR/ocrService";
 import { matchMembers } from "@/matching/matchEngine";
 import { supabase } from "@/lib/supabase";
 import { Member, Correction } from "@/types";
+import { validateUpload } from "@/lib/uploadValidation";
 
 export default function NewAttendancePage() {
   const [image, setImage] = useState<string | null>(null);
@@ -30,13 +31,15 @@ export default function NewAttendancePage() {
 
   const processFile = async (file: File) => {
     if (!file) return;
+    validateUpload(file);
     setIsProcessing(true);
     setProgressPct(0);
     setProgressMsg("Reading document…");
+    let objectUrl: string | undefined;
 
     try {
       // 0. Use object URL for instant preview (zero lag)
-      const objectUrl = URL.createObjectURL(file);
+      objectUrl = URL.createObjectURL(file);
       setImage(objectUrl);
 
       // 1. Run OCR with live progress
@@ -75,26 +78,33 @@ export default function NewAttendancePage() {
       setProgressMsg("Saving session…");
       setProgressPct(98);
 
-      // 2.5 Compress image for database storage to prevent payload limits
-      const compressedImage = await new Promise<string>((resolve) => {
+      // 2.5 Store only a private Storage object key, never image bytes in database rows.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Your session has expired. Please sign in again.");
+      const filePath = `${user.id}/${crypto.randomUUID()}.jpg`;
+      const compressedImage = await new Promise<Blob>((resolve, reject) => {
         const img = new Image();
         img.onload = () => {
-          const canvas = document.createElement('canvas');
+          const canvas = document.createElement("canvas");
           let width = img.width;
           let height = img.height;
-          const MAX = 1200;
-          if (width > MAX || height > MAX) {
-            if (width > height) { height *= MAX / width; width = MAX; }
-            else { width *= MAX / height; height = MAX; }
+          const max = 1600;
+          if (width > max || height > max) {
+            const scale = max / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
           }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.6));
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return reject(new Error("Unable to process image."));
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Unable to encode image.")), "image/jpeg", 0.75);
         };
-        img.src = objectUrl;
+        img.onerror = () => reject(new Error("Unable to read image."));
+        img.src = objectUrl!;
       });
+      const { error: uploadError } = await supabase.storage.from("attendance-scans").upload(filePath, compressedImage, { contentType: "image/jpeg", upsert: false });
+      if (uploadError) throw uploadError;
 
       // 3. Create session
       const { data: session, error: sessionError } = await supabase
@@ -104,7 +114,8 @@ export default function NewAttendancePage() {
           raw_ocr_data: extractedLines,
           suggested_table: finalResults,
           status: 'pending',
-          image_url: compressedImage,
+          owner_id: user.id,
+          image_url: filePath,
         })
         .select()
         .single();
@@ -122,6 +133,8 @@ export default function NewAttendancePage() {
       console.error("Processing error:", err);
       alert(`Error: ${err.message || "Something went wrong during processing."}`);
       setIsProcessing(false);
+    } finally {
+      if (typeof objectUrl !== "undefined") URL.revokeObjectURL(objectUrl);
     }
   };
 
