@@ -69,11 +69,9 @@ export async function performOCR(
   const sourceCanvas = await renderToCanvas(image);
 
   // ── Phase 1: Initialize Parallel Workers & Fallback ─────────────────────
-  // Adaptive scaling: use up to 4 primary workers based on hardware
-  const maxWorkers = typeof navigator !== 'undefined' && navigator.hardwareConcurrency 
-    ? Math.min(4, navigator.hardwareConcurrency - 1) 
-    : 2;
-  const numWorkers = Math.max(1, maxWorkers);
+  // Adaptive scaling: keep one CPU available for the UI.
+  const hardwareConcurrency = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : 2;
+  const numWorkers = Math.max(1, Math.min(4, hardwareConcurrency - 1));
 
   const scheduler = createScheduler();
   for (let i = 0; i < numWorkers; i++) {
@@ -85,6 +83,7 @@ export async function performOCR(
   // Persistent fallback worker for structurally anomalous cells
   const fallbackWorker = await createWorker('eng', 1, { workerPath: '/tesseract/worker.min.js', corePath: '/tesseract/tesseract-core.wasm.js', workerBlobURL: false });
   await fallbackWorker.setParameters({ tessedit_pageseg_mode: '8' as any, tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,/-()% ', preserve_interword_spaces: '0' as any });
+  try {
 
   const numRows = grid.rowBoundaries.length - 1;
   const numCols = grid.colBoundaries.length - 1;
@@ -237,12 +236,12 @@ export async function performOCR(
     });
   }
 
-  await scheduler.terminate();
-  await fallbackWorker.terminate();
-
   onProgress?.('Finalizing semantic layout…', 98);
   const semantic = analyseDocument(results);
   return semantic.rows.filter(r => r.region !== 'empty');
+  } finally {
+    await Promise.allSettled([scheduler.terminate(), fallbackWorker.terminate()]);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
