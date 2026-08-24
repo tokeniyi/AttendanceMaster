@@ -45,6 +45,7 @@ export default function SessionWorkspace() {
   const [zoom, setZoom] = useState(1);
   const [numCols, setNumCols] = useState(1);
   const [showDebug, setShowDebug] = useState(false);
+  const [sourceImageUrl, setSourceImageUrl] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const imagePanelRef = useRef<HTMLDivElement>(null);
 
@@ -77,6 +78,10 @@ export default function SessionWorkspace() {
       ]);
       if (sRes.data) {
         setSession(sRes.data);
+        if (sRes.data.image_url) {
+          const { data: signed } = await supabase.storage.from('attendance-scans').createSignedUrl(sRes.data.image_url, 300);
+          if (signed?.signedUrl) setSourceImageUrl(signed.signedUrl);
+        }
         const data: MatchResult[] = sRes.data.suggested_table || [];
         setTableData(data);
         setHistory([data]);
@@ -212,18 +217,25 @@ export default function SessionWorkspace() {
     alert("Copied to clipboard in Google Sheets format!");
   };
 
+  const [isSaving, setIsSaving] = useState(false);
+
   const saveState = async (status: Session['status'] = 'refining') => {
-    await supabase.from('sessions').update({ suggested_table: tableData, final_table: tableData, status, updated_at: new Date().toISOString() }).eq('id', id);
-    if (status === 'approved') {
-      const records = tableData.filter(r => r.suggestedMember && !r.isHeader).map(r => ({
-        member_id: r.suggestedMember!.id, event_name: session?.event_name, present: true, attendance_date: session?.session_date,
-      }));
-      if (records.length > 0) await supabase.from('attendance').insert(records);
-      const corrections = tableData.filter(r => r.status === 'correction' && r.suggestedMember && !r.isHeader).map(r => ({
-        p_incorrect_text: r.columns?.join(' ') || r.ocrName, p_member_id: r.suggestedMember!.id,
-      }));
-      for (const c of corrections) await supabase.rpc('upsert_correction', c);
-      router.push(`/sessions/${id}/success`);
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      if (status === 'approved') {
+        const { error } = await supabase.rpc('approve_session', { p_session_id: id, p_rows: tableData });
+        if (error) throw error;
+        router.push(`/sessions/${id}/success`);
+        return;
+      }
+      const { error } = await supabase.from('sessions').update({ suggested_table: tableData, status, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Unable to save session:', error);
+      alert(error instanceof Error ? error.message : 'Unable to save session.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -273,7 +285,7 @@ export default function SessionWorkspace() {
               <Copy className="h-3.5 w-3.5" /> Sheets Sync
             </button>
           </div>
-          <button onClick={() => saveState('approved')} className="h-9 bg-primary text-primary-foreground px-5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20">
+          <button onClick={() => saveState('approved')} disabled={isSaving} className="h-9 bg-primary text-primary-foreground px-5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20">
             Finalize & Approve
           </button>
         </div>
@@ -294,8 +306,8 @@ export default function SessionWorkspace() {
 
           <div ref={imagePanelRef} className="flex-1 overflow-auto scrollbar-hide p-8">
             <div className="relative inline-block transition-transform duration-500 ease-out origin-top-left" style={{ transform: `scale(${zoom})` }}>
-              {session?.image_url && (
-                <img src={session.image_url} alt="Source" className="max-w-none shadow-2xl border border-white/10 rounded-sm" />
+              {sourceImageUrl && (
+                <img src={sourceImageUrl} alt="Source" className="max-w-none shadow-2xl border border-white/10 rounded-sm" />
               )}
               {/* Debug overlay: show all region bboxes when debug mode active */}
               {showDebug && tableData.map((row, idx) => row.bbox && (
