@@ -27,6 +27,21 @@ export function matchMembers(
   return ocrNames.map(ocrName => {
     const lowerName = ocrName.toLowerCase();
 
+    // 0. Check for exact match first (most reliable)
+    const exactMatch = members.find(
+      m => m.full_name.toLowerCase() === lowerName ||
+           m.aliases.some(a => a.toLowerCase() === lowerName) ||
+           m.id.toLowerCase().includes(lowerName)
+    );
+    if (exactMatch) {
+      return {
+        ocrName,
+        suggestedMember: exactMatch,
+        confidence: 1.0,
+        status: 'exact',
+      };
+    }
+
     // 1. Check for learned corrections
     const correctedId = correctionsMap.get(lowerName);
     if (correctedId) {
