@@ -87,7 +87,29 @@ BEGIN
   SELECT p_session_id, (row->'suggestedMember'->>'id')::UUID, s.session_date, s.event_name, COALESCE((row->>'present')::BOOLEAN, TRUE)
   FROM jsonb_array_elements(p_rows) AS row
   JOIN sessions s ON s.id = p_session_id
-  WHERE row->'suggestedMember' IS NOT NULL AND row->>'isHeader' IS DISTINCT FROM 'true'
+  -- Only rows that carry a real member object, are not headers, and were not flagged
+  -- by the operator are recorded as attendance.
+  --
+  -- `row->'suggestedMember' IS NOT NULL` is NOT sufficient: a JSON `null` is a value,
+  -- not SQL NULL, so unmatched rows (status 'none') passed that test and
+  -- `->>'id'` then evaluated to SQL NULL, writing an attendance row with
+  -- member_id = NULL. The unique index is NULL-distinct, so one junk row accumulated
+  -- per unmatched line on every approval.
+  --
+  -- jsonb_typeof(...) = 'object' requires an actual member object, and the
+  -- ->>'id' IS NOT NULL / UUID-shape test makes the ::UUID cast below total: without it a
+  -- malformed client-supplied id aborts the entire approval transaction.
+  --
+  -- The FK on attendance.member_id is the backstop for well-formed but unknown ids.
+  WHERE jsonb_typeof(row->'suggestedMember') = 'object'
+    AND row->'suggestedMember'->>'id' IS NOT NULL
+    AND (row->'suggestedMember'->>'id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    AND row->>'isHeader' IS DISTINCT FROM 'true'
+    -- A flagged row is the one status the operator set to mean "do not record this".
+    -- Such a row can still carry a suggestedMember (the OCR text was wrong, the member
+    -- is still attached), so excluding by status - not by absence of a member - is what
+    -- actually honours the flag.
+    AND row->>'status' IS DISTINCT FROM 'flagged'
   ON CONFLICT (session_id, member_id) DO UPDATE SET present = EXCLUDED.present, event_name = EXCLUDED.event_name, attendance_date = EXCLUDED.attendance_date;
 END;
 $$;
