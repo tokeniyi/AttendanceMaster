@@ -155,7 +155,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   delete the clause. Add the regression tests from #20.
 
 **2. ~~Two incompatible auth strategies — `middleware.ts` vs `src/lib/supabase.ts`~~ — **CLOSED 2026-09-28**
-- **Fixed** on branch `fix/supabase-session-cookie-matches-middleware`
+- **Fixed** on branch `fix/supabase-cookie-session-matches-middleware`
   (`src/lib/supabase.ts`, `middleware.ts`, plus two new test files).
 - **The bug, confirmed by running it:** after a successful `signInWithPassword`, the session
   was written to `localStorage` under `sb-<project-ref>-auth-token` and `document.cookie`
@@ -475,7 +475,7 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
 | 2026-09-27 | `fix/approve-session-null-member-rows` | P0 #3 + SQL half of #4: `approve_session` row filter | [PR](../../pulls) *(opened — see §6)* | #3 closed, #4 half closed. 4 files. 9 new SQL tests + 2 pre-existing test files green. 38 → 37 closed |
-| 2026-09-28 | `fix/supabase-session-cookie-matches-middleware` | P0 #2: browser session must be a cookie the middleware can read | [PR](../../pulls) *(opened — see §6)* | #2 closed. 4 files. 12 new tests, full suite 15/15 green. 37 → 36 closed |
+| 2026-09-28 | `fix/supabase-cookie-session-matches-middleware` | P0 #2: browser session must be a cookie the middleware can read | [PR](../../pulls) *(opened — see §6)* | #2 closed. 4 files. 12 new tests, full suite 15/15 green. 37 → 36 closed |
 
 **Remaining backlog:** 3 × P0 (from 4), 20 × P1, 5 × P2, 8 × P3 = **36 open items**.
 
@@ -650,7 +650,7 @@ As of 2026-09-28 there are **three** open PRs against `main`, and they are **not
 |---|---|---|
 | #1 | `chore/maintenance-doc` | `docs/MAINTENANCE.md` (adds it) |
 | #2 | `fix/approve-session-null-member-rows` | `database/schema.sql`, `package.json`, `package-lock.json`, `docs/MAINTENANCE.md`, `src/services/approveSession.test.ts` |
-| #3 | `fix/supabase-session-cookie-matches-middleware` | `middleware.ts`, `src/lib/supabase.ts`, two new test files, `docs/MAINTENANCE.md` |
+| #3 | `fix/supabase-cookie-session-matches-middleware` | `middleware.ts`, `src/lib/supabase.ts`, two new test files, `docs/MAINTENANCE.md` |
 
 **All three edit `docs/MAINTENANCE.md`, and `main` does not contain that file at all** (#42).
 Merging them in the wrong order produces a large, noisy conflict in a 640-line document that
@@ -660,7 +660,7 @@ no human will want to resolve.
 1. `chore/maintenance-doc` — gets the backlog onto `main`. Smallest diff, and it makes every
    later doc update a normal edit instead of a cross-branch import.
 2. `fix/approve-session-null-member-rows` (#3 closed) — real P0, silent data corruption.
-3. `fix/supabase-session-cookie-matches-middleware` (#2 closed) — real P0, app unusable.
+3. `fix/supabase-cookie-session-matches-middleware` (#2 closed) — real P0, app unusable.
 
 Steps 2 and 3 touch disjoint code (`database/schema.sql` and its test vs `middleware.ts`,
 `src/lib/supabase.ts` and their tests), so they can merge in either order; only the shared
