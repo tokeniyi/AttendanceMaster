@@ -9,6 +9,7 @@ import {
   Layers, CheckSquare, Download, Copy
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { bulkApprovableRows } from "@/services/sessionRows";
 import { Session, Member, MatchResult } from "@/types";
 import { cn } from "@/lib/utils";
 import { COLUMN_TYPE_CONFIG, type ColumnType } from "@/lib/semanticAnalyzer";
@@ -192,7 +193,7 @@ export default function SessionWorkspace() {
     const headers = tableData.find(r => r.isHeader)?.columns || [];
     if (headers.length > 0) csvContent += headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',') + "\n";
 
-    tableData.filter(r => !r.isHeader && (r as any).region !== 'title' && (r as any).region !== 'footer').forEach(row => {
+    tableData.filter(r => !r.isHeader && r.region !== 'title' && r.region !== 'footer').forEach(row => {
       if (row.columns) csvContent += row.columns.map(c => `"${(c || '').replace(/"/g, '""')}"`).join(',') + "\n";
     });
 
@@ -210,7 +211,7 @@ export default function SessionWorkspace() {
     let tsvContent = "";
     const headers = tableData.find(r => r.isHeader)?.columns || [];
     if (headers.length > 0) tsvContent += headers.join('\t') + "\n";
-    tableData.filter(r => !r.isHeader && (r as any).region !== 'title' && (r as any).region !== 'footer').forEach(row => {
+    tableData.filter(r => !r.isHeader && r.region !== 'title' && r.region !== 'footer').forEach(row => {
       if (row.columns) tsvContent += row.columns.join('\t') + "\n";
     });
     navigator.clipboard.writeText(tsvContent);
@@ -319,15 +320,15 @@ export default function SessionWorkspace() {
                     width: row.bbox.x1 - row.bbox.x0,
                     height: row.bbox.y1 - row.bbox.y0,
                     borderColor:
-                      (row as any).region === 'header' ? 'rgba(59,130,246,0.7)' :
-                      (row as any).region === 'title' ? 'rgba(167,139,250,0.7)' :
-                      (row as any).region === 'footer' ? 'rgba(251,191,36,0.7)' :
-                      (row as any).region === 'metadata' ? 'rgba(148,163,184,0.5)' :
+                      row.region === 'header' ? 'rgba(59,130,246,0.7)' :
+                      row.region === 'title' ? 'rgba(167,139,250,0.7)' :
+                      row.region === 'footer' ? 'rgba(251,191,36,0.7)' :
+                      row.region === 'metadata' ? 'rgba(148,163,184,0.5)' :
                       'rgba(34,197,94,0.4)',
                     background:
-                      (row as any).region === 'header' ? 'rgba(59,130,246,0.05)' :
-                      (row as any).region === 'title' ? 'rgba(167,139,250,0.05)' :
-                      (row as any).region === 'data' ? 'rgba(34,197,94,0.03)' : 'transparent',
+                      row.region === 'header' ? 'rgba(59,130,246,0.05)' :
+                      row.region === 'title' ? 'rgba(167,139,250,0.05)' :
+                      row.region === 'data' ? 'rgba(34,197,94,0.03)' : 'transparent',
                   }}
                 />
               ))}
@@ -363,7 +364,8 @@ export default function SessionWorkspace() {
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => {
-                  const nd = tableData.map(r => r.region === 'data' ? { ...r, status: 'approved' as const } : r);
+                  const approvable = new Set(bulkApprovableRows(tableData));
+                  const nd = tableData.map(r => approvable.has(r) ? { ...r, status: 'approved' as const } : r);
                   pushHistory(nd);
                 }}
                 className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded text-[8px] font-black uppercase text-emerald-400 hover:bg-emerald-500/20 transition-all"
@@ -438,8 +440,8 @@ export default function SessionWorkspace() {
                         "border-b border-white/[0.04] cursor-pointer transition-colors relative",
                         isFocused ? "bg-primary/[0.06]" : "hover:bg-white/[0.02]",
                         row.isHeader ? "bg-white/[0.04]" : "",
-                        (row as any).region === 'title' || (row as any).region === 'metadata' ? "bg-violet-500/5" : "",
-                        (row as any).region === 'footer' ? "bg-amber-500/5" : "",
+                        row.region === 'title' || row.region === 'metadata' ? "bg-violet-500/5" : "",
+                        row.region === 'footer' ? "bg-amber-500/5" : "",
                         row.status === 'approved' ? "opacity-55" : "",
                         row.status === 'flagged' ? "border-l-2 border-rose-500" : ""
                       )}
@@ -518,25 +520,25 @@ export default function SessionWorkspace() {
                 </div>
 
                 {/* AI Explanation */}
-                {(focusedRow as any).explanation && (
+                {focusedRow.explanation && (
                   <div className="mt-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Zap className="h-2.5 w-2.5 text-primary" />
                       <span className="text-[7px] font-black uppercase tracking-widest text-primary">AI Reasoning</span>
                     </div>
                     <p className="text-[9px] text-muted-foreground leading-relaxed">
-                      {(focusedRow as any).explanation}
+                      {focusedRow.explanation}
                     </p>
-                    {(focusedRow as any).region && (
+                    {focusedRow.region && (
                       <div className={cn(
                         "mt-2 inline-block px-2 py-0.5 rounded text-[7px] font-black uppercase border",
-                        (focusedRow as any).region === 'header' ? 'text-blue-400 bg-blue-400/10 border-blue-400/20' :
-                        (focusedRow as any).region === 'title' ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
-                        (focusedRow as any).region === 'footer' ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' :
-                        (focusedRow as any).region === 'metadata' ? 'text-slate-400 bg-slate-400/10 border-slate-400/20' :
+                        focusedRow.region === 'header' ? 'text-blue-400 bg-blue-400/10 border-blue-400/20' :
+                        focusedRow.region === 'title' ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
+                        focusedRow.region === 'footer' ? 'text-amber-400 bg-amber-400/10 border-amber-400/20' :
+                        focusedRow.region === 'metadata' ? 'text-slate-400 bg-slate-400/10 border-slate-400/20' :
                         'text-emerald-400 bg-emerald-400/10 border-emerald-400/20'
                       )}>
-                        {(focusedRow as any).region}
+                        {focusedRow.region}
                       </div>
                     )}
                   </div>
