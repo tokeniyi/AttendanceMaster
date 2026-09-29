@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Upload, Database, ArrowRight, Zap, FileImage, CheckCircle2 } from "lucide-react";
 import { performOCR } from "@/OCR/ocrService";
 import { matchMembers } from "@/matching/matchEngine";
+import { mergeMatchedRows } from "@/services/sessionRows";
 import { supabase } from "@/lib/supabase";
 import { Member, Correction } from "@/types";
 import { validateUpload } from "@/lib/uploadValidation";
@@ -64,16 +65,9 @@ export default function NewAttendancePage() {
         corrections
       );
 
-      const finalResults = matchedResults.map((res, i) => ({
-        ...res,
-        columns: extractedLines[i]?.columns,
-        emptyCells: extractedLines[i]?.emptyCells,
-        ocrConfidence: extractedLines[i]?.confidence,
-        structuralConfidence: extractedLines[i]?.structuralConfidence,
-        isHeader: extractedLines[i]?.isHeader,
-        bbox: extractedLines[i]?.bbox,
-        rowIndex: extractedLines[i]?.rowIndex,
-      }));
+      // Spread the OCR line rather than enumerating fields: enumerating them is what
+      // silently dropped region/semanticConfidence/explanation (backlog P0 #5).
+      const finalResults = mergeMatchedRows(matchedResults, extractedLines);
 
       setProgressMsg("Saving session…");
       setProgressPct(98);
