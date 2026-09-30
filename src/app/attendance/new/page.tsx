@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Upload, Database, ArrowRight, Zap, FileImage, CheckCircle2 } from "lucide-react";
+import { Upload, Database, ArrowRight, Zap, FileImage, CheckCircle2, AlertCircle } from "lucide-react";
 import { performOCR } from "@/OCR/ocrService";
 import { matchMembers } from "@/matching/matchEngine";
 import { supabase } from "@/lib/supabase";
@@ -17,6 +17,7 @@ export default function NewAttendancePage() {
   const [corrections, setCorrections] = useState<Correction[]>([]);
   const [eventName, setEventName] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -31,7 +32,15 @@ export default function NewAttendancePage() {
 
   const processFile = async (file: File) => {
     if (!file) return;
-    validateUpload(file);
+    // validateUpload used to throw HERE, above the try below. processFile is invoked
+    // from onChange/onDrop without a .catch(), so the rejection escaped unhandled: the
+    // file was silently refused and the user saw nothing at all. It returns a message now.
+    const rejection = validateUpload(file);
+    if (rejection) {
+      setFileError(rejection);
+      return;
+    }
+    setFileError(null);
     setIsProcessing(true);
     setProgressPct(0);
     setProgressMsg("Reading document…");
@@ -147,7 +156,10 @@ export default function NewAttendancePage() {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) processFile(file);
+    // Previously non-image drops were discarded by `file.type.startsWith('image/')` with no
+    // message whatsoever. Routing every file through processFile means validateUpload
+    // produces the same explanation the file picker would.
+    if (file) processFile(file);
   };
 
   return (
@@ -177,6 +189,15 @@ export default function NewAttendancePage() {
             disabled={isProcessing}
           />
         </div>
+
+        {/* Rejection reason for the last refused file. Before this, a rejected upload
+            produced no output at all — the throw escaped the async handler. */}
+        {fileError && (
+          <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-red-500" />
+            <p className="text-xs font-bold text-red-500">{fileError}</p>
+          </div>
+        )}
 
         {/* Drop Zone */}
         <div
