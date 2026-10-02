@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { Session, Member, MatchResult } from "@/types";
 import { cn } from "@/lib/utils";
 import { COLUMN_TYPE_CONFIG, type ColumnType } from "@/lib/semanticAnalyzer";
+import { canFinalize, reviewProgress } from "@/services/approval";
 
 const CellInput = ({ initialValue, onChange, isHeader }: { initialValue: string, onChange: (val: string) => void, isHeader?: boolean }) => {
   const [val, setVal] = useState(initialValue);
@@ -224,6 +225,14 @@ export default function SessionWorkspace() {
     setIsSaving(true);
     try {
       if (status === 'approved') {
+        // Defence in depth: the button is disabled, but saveState is also reachable
+        // from anywhere else that calls it, so the invariant is enforced at the point
+        // of the write rather than at one call site.
+        if (!canFinalize(tableData)) {
+          setIsSaving(false);
+          alert('Review every matched row before finalizing. Rows you never looked at would be recorded as present.');
+          return;
+        }
         const { error } = await supabase.rpc('approve_session', { p_session_id: id, p_rows: tableData });
         if (error) throw error;
         router.push(`/sessions/${id}/success`);
@@ -239,19 +248,23 @@ export default function SessionWorkspace() {
     }
   };
 
-  if (isLoading) return (
-    <div className="flex flex-col items-center justify-center h-screen bg-[#050505] text-white gap-4">
-      <div className="relative h-16 w-16">
-        <div className="absolute inset-0 border-4 border-white/5 rounded-full" />
-        <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground animate-pulse">Loading Workspace…</p>
-    </div>
-  );
+  // Derived from the same helper the tests cover, so the gate the operator sees and
+    // the gate the button enforces can never drift apart. Declared before the early
+    // return below so hook order is stable across renders.
+    const review = useMemo(() => reviewProgress(tableData), [tableData]);
+    const finalizeReady = review.complete;
 
-  const focusedRow = focusedRowIdx !== null ? tableData[focusedRowIdx] : null;
-  const approvedCount = tableData.filter(r => r.status === 'approved').length;
-  const progressPct = tableData.length > 0 ? (approvedCount / tableData.length) * 100 : 0;
+    if (isLoading) return (
+      <div className="flex flex-col items-center justify-center h-screen bg-[#050505] text-white gap-4">
+        <div className="relative h-16 w-16">
+          <div className="absolute inset-0 border-4 border-white/5 rounded-full" />
+          <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground animate-pulse">Loading Workspace…</p>
+      </div>
+    );
+
+    const focusedRow = focusedRowIdx !== null ? tableData[focusedRowIdx] : null;
 
   return (
     <div className="flex flex-col h-screen bg-[#080808] text-white overflow-hidden">
@@ -285,7 +298,19 @@ export default function SessionWorkspace() {
               <Copy className="h-3.5 w-3.5" /> Sheets Sync
             </button>
           </div>
-          <button onClick={() => saveState('approved')} disabled={isSaving} className="h-9 bg-primary text-primary-foreground px-5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20">
+          <button
+            onClick={() => saveState('approved')}
+            disabled={isSaving || !finalizeReady}
+            title={
+              finalizeReady
+                ? 'Write the reviewed rows to the attendance register'
+                : `${review.unresolved} row(s) still need a decision — approve or flag them before finalizing`
+            }
+            className={cn(
+              "h-9 bg-primary text-primary-foreground px-5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20",
+              (isSaving || !finalizeReady) && "opacity-40 cursor-not-allowed hover:scale-100"
+            )}
+          >
             Finalize & Approve
           </button>
         </div>
@@ -378,9 +403,14 @@ export default function SessionWorkspace() {
                 <Layers className="h-3 w-3" /> Debug
               </button>
               <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progressPct}%` }} />
+                <div className="h-full bg-primary transition-all duration-500" style={{ width: `${review.progressPct}%` }} />
               </div>
-              <span className="text-[9px] font-mono text-muted-foreground">{approvedCount}/{tableData.length}</span>
+              <span
+                className="text-[9px] font-mono text-muted-foreground"
+                title={`${review.approved} approved · ${review.flagged} flagged · ${review.unresolved} unresolved`}
+              >
+                {review.approved + review.flagged}/{review.eligible}
+              </span>
             </div>
           </div>
 
