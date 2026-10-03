@@ -8,7 +8,7 @@
 - **Description:** OCR-based attendance register marking (Next.js 15, Supabase, tesseract.js, Fuse.js)
 - **Default branch:** `main` (protected — never pushed to directly)
 - **Review baseline:** commit `1c8c401`
-- **Last reviewed:** 2026-10-01
+- **Last reviewed:** 2026-10-03
 
 > **CRITICAL — `main` is currently BROKEN (found 2026-10-01).**
 > Commit `5f52560` added a step-0 exact-match block to `matchEngine.ts` but did not delete
@@ -212,6 +212,33 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** extend the SQL `WHERE` to exclude `status = 'flagged'`; require `status='approved'`
   or add an explicit "approve all unflagged" confirm step. Add a `minConfidence` constant to
   `matchEngine.ts` and return `status:'none'` below it.
+- **STATUS 2026-10-03 — fuzzy half CLOSED on `fix/fuzzy-confidence-floor`; the UI half and
+  the SQL half are separate open PRs.**
+  **The prescribed `minConfidence` floor is NOT implementable as written, and this was
+  verified by execution, not assumed.** Measuring a 4-member roster with the shipped
+  `threshold: 0.35`:
+  - 13 of 22 junk fragments (`"a"`, `"Ad"`, `"gh"`, `"Ma"`, `"Lo"`, `"Ok"`, …) resolved to a
+    real person at `status:'fuzzy'`, **at confidence 0.9672–0.9959** — and this was *after*
+    PR #6 anchored the exact-id path. The fuzzy path was left completely open.
+  - Genuinely misread **real** names scored **0.588–0.760** (`"Ada Lovclacc"` 0.588,
+    `"Grace Hoppr"` 0.695, `"Chinelo Okonkw"` 0.967 as a truncation).
+  - So the two populations **overlap**: at floor 0.7 all 13 junk entries survive and 11/15
+    real matches survive; at 0.95 all 13 junk entries still survive. Fuse scores
+    edit-distance *ratios*, and a short query against a long name scores near-optimistically.
+  - **Length separates them perfectly**: junk ≤2 chars, every legitimate match ≥4.
+  - **What shipped instead:** `MIN_FUZZY_MATCH_LENGTH = 3` gates the *fuzzy* path only
+    (`matchEngine.ts`). Short text returns `status:'none'` — no suggestion — leaving the row
+    for the operator instead of pre-filling the wrong person. At 3, all 13 junk fragments
+    are rejected and all 13 legitimate short names still resolve; 5 would reject real short
+    names without rejecting any extra junk.
+  - Exact name/alias matches and learned corrections are deliberately **untouched** — both
+    are authoritative decisions, not fuzzy guesses.
+  - **Still open:** the SQL `WHERE` half (exclude `status='flagged'`) — PR #2; the
+    finalize-button review gate — PR #7; and SQL-level tests for the row-selection
+    contract (#28).
+  - **Newly discovered (2026-10-03):** a confidence floor is the wrong instrument *for any*
+    fuzzy matcher here, because confidence and correctness are anti-correlated at short
+    lengths. Any future attempt to add one should be rejected with this measurement in hand.
 
 **5. `region` / `explanation` / `semanticConfidence` are dropped before persistence, silently killing four features**
 - Producer `src/app/attendance/new/page.tsx:67-76`; consumers at
@@ -380,6 +407,18 @@ stops the §10 drift from recurring.
 `DROP POLICY IF EXISTS` gives no version tracking, no rollback, and no way to know what is
 deployed. Adopt `supabase/migrations/` with numbered timestamped files.
 
+**39. `docs/MAINTENANCE.md` has forked across six branches and does not exist on `main`**
+- New item, 2026-10-03. The document that every automated run treats as its source of truth
+  lives only on `chore/maintenance-doc` (PR #1, unmerged), and five other PR branches each
+  carry a **different revision of it**. Two 2026-10-02 runs therefore recorded *contradictory*
+  states for P0 #4 — one claiming the review gate was already closed, the other still listing
+  it as open — because each was reading its own branch's copy.
+- **Impact:** a future run can silently trust a stale or contradicted analysis. This run
+  stacked on `fix/anchor-id-exact-match` and had to reconcile two revisions by hand.
+- **Fix:** merge PR #1 first, then rebase the open branches onto it and rebase each later
+  run's doc edit on the merged copy. Until then, treat the document as advisory and
+  re-verify every item against the actual code — which is the right practice anyway (§2).
+
 **28. Test the SQL layer** — add a Supabase local test (`supabase test db`) covering
 `approve_session` and `upsert_correction`. The row-selection contract is the enforcement
 point for #3 and #4 and currently has zero coverage.
@@ -456,24 +495,38 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
 | 2026-10-01 | `fix/anchor-id-exact-match` | **#0** `main` does not compile (duplicate `const exactMatch` from `5f52560`) + **#1** UUID-substring match reported as `exact` @ 1.0 confidence + **#12** exact-over-correction regression test | this run | 24/24 tests, `tsc` 0 errors, lint 0 errors. **13 of the new tests verified to FAIL against the pre-fix code.** Precedence test verified to fail if step 0 is reordered. |
+| 2026-10-03 | `fix/fuzzy-confidence-floor` | **#4 (fuzzy half)** — 1–2 char OCR fragments resolved to real people at 0.967–0.996 confidence via the fuzzy path, which PR #6 left open | this run | 52/52 tests, lint 0 errors (4 pre-existing warnings), `tsc` clean. **14 of the new tests verified to FAIL against the pre-fix code.** The `minConfidence` floor prescribed by the backlog was rejected as unimplementable — see #4. |
 
 **Remaining backlog:** 5 × P0 (#2–#5 + #1b reclassified to P1), 19 × P1, 5 × P2, 8 × P3.
-**Closed so far:** #0, #1, #12 (3 of 41). **All four remaining P0 bugs already have open PRs** —
-do not start them again; check for a merge first.
+**Closed so far:** #0, #1, #12 (3 of 41) + the fuzzy half of #4. **All four remaining P0 bugs
+already have open PRs** — do not start them again; check for a merge first.
+
+> **Stale-analysis note (2026-10-03).** `docs/MAINTENANCE.md` does **not** exist on `main` —
+> it lives only on the unmerged `chore/maintenance-doc` branch (PR #1). Worse, the doc has
+> **forked**: `fix/anchor-id-exact-match`, `fix/approve-session-null-member-rows`,
+> `fix/supabase-cookie-session-matches-middleware`, `fix/persist-ocr-semantic-fields` and
+> `fix/upload-validation-shows-error` all edit their own copy, and `fix/finalize-review-gate`
+> carries yet another revision. This run stacked on `fix/anchor-id-exact-match`, so its
+> baseline text is that branch's copy. **Until PR #1 and one canonical doc land, every run must
+> expect to hand-merge doc conflicts.** This is now a blocker worth its own item (#39, P2).
 
 ### Recommended order for the next runs
 
 1. **#13 — `members`/`corrections` RLS is `USING (true)` across tenants.** The only P0-class
    item with **no PR against it**, and a live PII exposure (`full_name`, `email`, `phone`,
    `department` readable and writable by any signed-up user). Highest risk × zero coverage.
-2. **#4's client half** — PR #2 fixes the SQL filter, but the finalize button still has no gate
-   on `approvedCount`/`progressPct` (`sessions/[id]/page.tsx:253-254` is computed, displayed,
-   never enforced), and `matchEngine` has no `minConfidence` floor, so a weak fuzzy match just
-   below `threshold: 0.35` is indistinguishable from a confirmed one.
-3. **#7 — the inverted `validateRow` condition.** Data-destroying and *unverified by execution*.
-4. **#9 — unanchored `/no\.?/` classifies `Notes`/`Nomination` as `serial`.** Data-destroying,
+   *Unchanged — still the top recommendation.*
+2. **#2 — the cookie/`localStorage` auth split** (PR #3 is open but unmerged). With the app
+   expected to be unusable wherever the middleware runs, no other fix is testable end-to-end
+   until this merges. Consider flagging to the user as the merge priority.
+3. **#4's SQL half** — PR #2 must land for the `status='flagged'` exclusion to exist at all.
+4. **#7 — the inverted `validateRow` condition.** Data-destroying and *unverified by execution*.
+5. **#9 — unanchored `/no\.?/` classifies `Notes`/`Nomination` as `serial`.** Data-destroying,
    also unverified by execution (the original review claimed verification; re-verify before fixing).
-5. **#28 — SQL tests for `approve_session`.** The real enforcement point for #3/#4 has zero coverage.
+6. **#28 — SQL tests for `approve_session`.** The real enforcement point for #3/#4 has zero coverage.
+
+> **Do not attempt P0 #4's `minConfidence` floor again.** It is now measured to be the wrong
+> instrument; see the 2026-10-03 STATUS note under item #4 for the numbers.
 
 **Note on every branch from here:** work in a `git worktree`, not the main checkout. The main
 checkout carries an uncommitted `src/matching/matchEngine.ts` edit (§7) that automated runs must
