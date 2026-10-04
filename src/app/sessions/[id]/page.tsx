@@ -11,7 +11,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { Session, Member, MatchResult } from "@/types";
 import { cn } from "@/lib/utils";
-import { COLUMN_TYPE_CONFIG, type ColumnType } from "@/lib/semanticAnalyzer";
+import { COLUMN_TYPE_CONFIG, isSerialLabel, type ColumnType } from "@/lib/semanticAnalyzer";
 
 const CellInput = ({ initialValue, onChange, isHeader }: { initialValue: string, onChange: (val: string) => void, isHeader?: boolean }) => {
   const [val, setVal] = useState(initialValue);
@@ -57,7 +57,7 @@ export default function SessionWorkspace() {
       const samples = tableData.filter(r => !r.isHeader).map(r => r.columns?.[i] ?? '').filter(Boolean);
       const lowerLabel = label.toLowerCase();
       let type: ColumnType = 'unknown';
-      if (/sr\.?|no\.?|#|serial/i.test(lowerLabel)) type = 'serial';
+      if (isSerialLabel(lowerLabel)) type = 'serial';
       else if (/name/i.test(lowerLabel)) type = 'name';
       else if (/designation|role/i.test(lowerLabel)) type = 'designation';
       else if (/%|percent/i.test(lowerLabel)) type = 'percentage';
