@@ -215,12 +215,20 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** load the roster inside the same `try` immediately before `matchMembers` (or track
   a `rosterLoaded` promise), surface `error` in the UI, disable the dropzone until resolved.
 
-**9. Unanchored `/no\.?/` classifies ordinary headers as `serial`, and `normalizeSerial` then destroys their contents**
+**9. ~~Unanchored `/no\.?/` classifies ordinary headers as `serial`~~ — DONE 2026-10-04 (`fix/anchor-serial-header-regex`)**
 - `src/lib/semanticAnalyzer.ts:217` (fork at `src/app/sessions/[id]/page.tsx:60`); consumer `src/lib/dataCorrector.ts:54-55, 97-100`
 - **Verified by execution:** `Notes`, `Nomination`, `Notional` → `serial`. A `serial` column is
   routed to `normalizeSerial`, which strips every non-digit. Data-destroying, silent, and it
   happens inside the pipeline before the operator ever sees the row.
-- **Fix:** `/\b(?:sr|no|serial)\b\.?|^#/i`. Add the regression cases from #21.
+- **Fix applied:** extracted an exported `isSerialLabel()` predicate that matches serial headers
+  **whole** (`SERIAL_LABEL_PATTERNS`), and made the page import it instead of re-inlining the
+  regex. Tests in `src/lib/semanticAnalyzer.test.ts` pin both directions — false positives
+  (`Notes`/`Nomination`/`Notional`/`Note`/`North`/`Normal`/`Notice`/`Phone`) and false negatives
+  (`Sr.`/`Sno`/`Sl No`/`Sr. No.`/`Roll No`/`Serial`/`Number`). Also added `S/N`, `SN`, `S.N`,
+  which the old regex never matched either — a false negative the new test surfaced.
+- **Still open:** the page's fork also inverts `status`/`numeric` (item **#10**) — it tests
+  `/total|working|days|balance|absent|present|lwp|ott/` *before* `/status/`, so `Present` is
+  badged `numeric`. Only the serial half was fixed on this branch, to keep it to one task.
 
 **10. Two forked column-type inference implementations that already disagree**
 - `src/lib/semanticAnalyzer.ts:214-238` vs `src/app/sessions/[id]/page.tsx:53-70`
@@ -382,6 +390,8 @@ projection thresholds, `max = 1600`. Each silently changes OCR quality; none is 
 ## 4. Testing
 
 - **One test file** for the entire application: `src/matching/matchEngine.test.ts` (vitest).
+  *(As of 2026-10-04 there are three: this, `src/services/approval.test.ts`, and
+  `src/lib/semanticAnalyzer.test.ts` — but the OCR pipeline remains untested.)*
 - It covers the one module that is pure logic and easy to break — a good instinct — but the
   surface it guards is small next to what is untested.
 - **Untested:** the entire OCR pipeline (`ocrService`, `tableSegmenter`, `computerVision`,
@@ -409,8 +419,18 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | Date | Branch | Task | PR | Result |
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
+| 2026-10-04 | `fix/anchor-serial-header-regex` | P1 **#9** — anchor the serial-header regex | #9 | Tests 12/12, lint 0 errors, tsc clean. **#9 closed.** Chose #9 over #7 because #7 leaves raw OCR text visible to the operator while #9 silently empties whole columns. Also discovered `S/N`/`SN`/`S.N` were never matched by the old regex. |
 
-**Remaining backlog:** 6 × P0, 19 × P1, 5 × P2, 8 × P3 = **38 open items**.
+**Remaining backlog:** 6 × P0 (all with open PRs — see below), 18 × P1, 5 × P2, 8 × P3 = **37 open items**.
+
+> ⚠️ **Correction to the §3 priority ordering:** all **6 P0 items are already implemented and
+> sitting in open, unmerged PRs** (#1→PR6, #2→PR3, #3→PR2, #4→PR7 + PR8, #5→PR4, #6→PR5).
+> The backlog ordering "P0 before P1" is therefore a trap for automated runs: a run that picks
+> P0 will duplicate an existing PR. Future runs must check `gh pr list` before choosing, and
+> should treat the real constraint as *how many PRs are open at once*, not priority class.
+> `fix/anchor-id-exact-match` (PR6) also supersedes §7's note that the `matchEngine.ts` working-tree
+> edit needs a decision: PR6 rewrites that exact function, so merging it will conflict with the
+> uncommitted de-duplication. **That still needs a human decision** — see §7.
 
 ---
 
@@ -429,3 +449,11 @@ in the retained block and is backlog item **#1**.
 untracked work sitting in the working tree, and the daily cron job runs against this same
 checkout — so it must be resolved before automated runs begin, or the job will operate on a
 dirty tree.
+
+> **Updated 2026-10-04 — this is now urgent.** PR6 (`fix/anchor-id-exact-match`) rewrites the very
+> same `matchMembers` block and already removes the dead exact-match copy as part of item #1.
+> The uncommitted diff and PR6 are now **near-identical edits to the same lines**, so merging
+> PR6 will very likely conflict with this working tree. Recommended resolution: **discard** the
+> uncommitted edit (`git checkout -- src/matching/matchEngine.ts`) and let PR6 land, since PR6 is
+> the superset — it carries the de-duplication *plus* the anchored-ID fix *plus* the regression
+> tests. Automated runs will continue to leave this file alone until a human decides.
