@@ -7,7 +7,7 @@ import {
   type TableGrid,
 } from '@/lib/tableSegmenter';
 import { analyseDocument, classifyRow, inferColumnSchema, type SemanticDocument } from '@/lib/semanticAnalyzer';
-import { validateRow } from '@/lib/dataCorrector';
+import { finalizeRowColumns } from '@/lib/dataCorrector';
 
 export type { SemanticDocument };
 
@@ -181,17 +181,18 @@ export async function performOCR(
     if (cols.every(c => c.length === 0)) continue;
 
     const avgConf = cellConfs[r].reduce((s, v) => s + v, 0) / Math.max(1, cellConfs[r].length);
-    let finalCols = [...cols];
-    let rowConf = avgConf;
+
+    // Phase 3: Validate Row Schema + apply per-column corrections.
+    // Corrections apply to EVERY row (backlog #7) — the rows that trip Phase 4
+    // are the ones that needed normalization most.
+    let final = finalizeRowColumns(cols, numCols, colTypes, avgConf);
     let explanation = '';
 
-    // Phase 3: Validate Row Schema
-    const validation = validateRow(finalCols, numCols, colTypes);
-
     // Phase 4: Fallback Loop (Triggered only on confidence < 75 OR schema violation)
-    if (!validation.isValid || avgConf < 75) {
-      if (!validation.isValid) explanation += `Corrected: ${validation.issues.join(', ')} | `;
+    if (final.needsFallback) {
+      if (final.issues.length > 0) explanation += `Corrected: ${final.issues.join(', ')} | `;
       let healed = false;
+      const healedCols = [...final.columns];
 
       for (let c = 0; c < numCols; c++) {
         if (cellConfs[r][c] < 70) {
@@ -201,7 +202,7 @@ export async function performOCR(
              try {
                const { data } = await fallbackWorker.recognize(dataUrl);
                if (data.confidence > cellConfs[r][c]) {
-                 finalCols[c] = data.text.trim().replace(/\n/g, ' ');
+                 healedCols[c] = data.text.trim().replace(/\n/g, ' ');
                  cellConfs[r][c] = data.confidence;
                  healed = true;
                }
@@ -209,18 +210,16 @@ export async function performOCR(
           }
         }
       }
-      
+
       if (healed) {
         explanation += `Healed low-confidence cells using fallback model.`;
-        // Re-validate after fallback
-        const reValidation = validateRow(finalCols, numCols, colTypes);
-        finalCols = reValidation.correctedColumns;
+        // Re-validate the healed text so corrections are applied to it too.
+        final = finalizeRowColumns(cols, numCols, colTypes, avgConf, healedCols);
       }
-    } else {
-      finalCols = validation.correctedColumns;
     }
 
-    rowConf = cellConfs[r].reduce((s, v) => s + v, 0) / Math.max(1, cellConfs[r].length);
+    const finalCols = final.columns;
+    const rowConf = cellConfs[r].reduce((s, v) => s + v, 0) / Math.max(1, cellConfs[r].length);
     const text = finalCols.filter(c => c.length > 0).join('  ');
 
     results.push({
