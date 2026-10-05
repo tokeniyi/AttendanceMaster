@@ -196,15 +196,29 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ### P1 — Significant
 
-**7. `validateRow` corrections are discarded on exactly the rows that needed them**
+**7. ~~`validateRow` corrections are discarded on exactly the rows that needed them~~ — DONE 2026-10-05 (`fix/ocr-row-corrections-discarded`)**
 - `src/OCR/ocrService.ts:192-221` — **an inverted condition**
-- `finalCols = validation.correctedColumns` is assigned in the `else` at `:220` and inside
-  `if (healed)` at `:217`, but **not** when the low-confidence branch is taken and nothing
+- `finalCols = validation.correctedColumns` was assigned in the `else` at `:220` and inside
+  `if (healed)` at `:217`, but **not** when the low-confidence branch was taken and nothing
   healed. So every per-column `correctCellText` normalization (name title-casing, numeric
-  letter→digit repair, status mapping — `dataCorrector.ts:139-142`) is applied **only to rows
+  letter→digit repair, status mapping — `dataCorrector.ts:139-142`) was applied **only to rows
   that already had high confidence**, which are precisely the rows that did not need it.
-- **Fix:** assign `finalCols = validation.correctedColumns` unconditionally after the fallback
-  loop, then overwrite with the healed result if `healed`. Remove the `else`.
+- **Fix applied:** extracted the Phase 3→Phase 4 decision into an exported pure function
+  `finalizeRowColumns()` in `src/lib/dataCorrector.ts:158-199`, called from `ocrService.ts:184`.
+  Corrections now apply to **every** row. The Phase 4 loop writes healed text into a separate
+  `healedCols` array and re-runs `finalizeRowColumns` on it, so healed values are corrected too.
+  `MIN_ROW_CONFIDENCE = 75` is now a named export instead of a literal in two places.
+- **Why extraction was necessary:** the buggy logic was inline in a ~200-line function
+  requiring 5 tesseract workers + a canvas + WASM, so it was unreachable from a unit test. The
+  control-flow *decision* is now testable with no OCR infrastructure at all.
+- **Tests:** `src/lib/dataCorrector.test.ts` — 10 tests. 3 pin the bug (low-confidence-unhealed,
+  schema-invalid-unhealed, numeric letter-confusion), 7 pin preserved behaviour (threshold
+  boundary at exactly 75, `needsFallback` in both directions, healed-text recomputation, and the
+  `healedColumns === null` sentinel vs empty-array distinction). **Mutation-verified:**
+  reintroducing the old branch fails exactly the 3 bug tests and passes all 7 guards.
+- **Newly discovered while testing:** `validateRow([], n, …)` pads to `n` empty cells rather
+  than returning `[]`, so a falsy-but-present `healedColumns` must be distinguished with
+  `=== null`, not truthiness. Pinned by a test.
 
 **8. Roster/corrections fetch race + swallowed errors**
 - `src/app/attendance/new/page.tsx:22-30, 61-65`
@@ -384,15 +398,16 @@ projection thresholds, `max = 1600`. Each silently changes OCR quality; none is 
 - **One test file** for the entire application: `src/matching/matchEngine.test.ts` (vitest).
 - It covers the one module that is pure logic and easy to break — a good instinct — but the
   surface it guards is small next to what is untested.
-- **Untested:** the entire OCR pipeline (`ocrService`, `tableSegmenter`, `computerVision`,
-  `dataCorrector`, `semanticAnalyzer`), all Supabase access, all routes and components, and —
-  critically — `database/schema.sql`, which is the actual enforcement point for attendance
-  writes.
+- **Untested:** the entire OCR pipeline (`ocrService`, `tableSegmenter`, `computerVision`),
+  all Supabase access, all routes and components, and — critically —
+  `database/schema.sql`, which is the actual enforcement point for attendance
+  writes. *(`dataCorrector` gained coverage 2026-10-05 via #7 — 10 tests on the row
+  finalization contract. `semanticAnalyzer` tests exist on PR #9, not yet on `main`.)*
 - **The one tested approval component never runs in production** (#11), so the approval path has
   effectively **zero** coverage of the code that matters.
 - **Highest-value new tests:** (a) the UUID-substring regression (#1), (b) the
-  exact-over-correction precedence (#12), (c) the `serial` header misclassification (#9), and
-  (d) SQL tests for `approve_session` (#28).
+  exact-over-correction precedence (#12), and (c) SQL tests for `approve_session` (#28).
+  *(c) for the `serial` header misclassification (#9) was written on PR #9 and is still open.*
 
 ---
 
@@ -409,8 +424,16 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | Date | Branch | Task | PR | Result |
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
+| 2026-10-05 | `fix/ocr-row-corrections-discarded` | P1 **#7** — stop discarding `validateRow` corrections on low-confidence rows | #10 | Tests 13/13 (was 3), lint 0 errors / 4 warnings, tsc clean. **#7 closed.** Mutation-verified: reintroducing the old branch fails exactly the 3 bug tests. Chose #7 over higher-numbered P1 items because it is the only unclaimed P1 that silently mutates every OCR row. |
 
-**Remaining backlog:** 6 × P0, 19 × P1, 5 × P2, 8 × P3 = **38 open items**.
+**Remaining backlog:** 6 × P0, 18 × P1, 5 × P2, 8 × P3 = **37 open items**.
+
+> ⚠️ **The real bottleneck is review throughput, not the backlog.** As of 2026-10-05 there are
+> **9 open, unmerged PRs** (#2–#10) and **zero P0 fixes have landed** — only the initial doc PR
+> merged. All 6 P0 items sit behind PRs that nobody has merged, so the four silent
+> data-corruption bugs are still live in `main`. **Writing new P1 fixes is now lower value than
+> merging what exists.** A future run should stop adding to the queue unless every open PR is
+> merged or explicitly rejected.
 
 ---
 
@@ -418,6 +441,13 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 
 At review time the working tree carried one uncommitted modification to
 `src/matching/matchEngine.ts` (16 lines removed, 1 added).
+
+> **2026-10-05 note.** The 2026-10-04 run log entry and the "DONE" markers for #9 exist **only on
+> PR #9's branch**, never on `main`. A run that checks out `main` sees #9 as still open — which is
+> correct, because PR #9 is still unmerged. Do not carry those markers forward by hand; they
+> reappear when the PR merges. For the same reason, `src/lib/semanticAnalyzer.test.ts` is
+> **not tracked on `main`** (it only exists inside PR #9's working tree), and PR #9 will conflict
+> with this branch's `docs/MAINTENANCE.md` edits at the §6 run log and the #7 entry.
 
 **This is a safe de-duplication, not a regression.** Commit `5f52560` ("prioritize exact matches
 over corrections") already introduced an identical step-0 exact-match block at lines 30-43, which
