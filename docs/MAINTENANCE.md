@@ -8,7 +8,7 @@
 - **Description:** OCR-based attendance register marking (Next.js 15, Supabase, tesseract.js, Fuse.js)
 - **Default branch:** `main` (protected — never pushed to directly)
 - **Review baseline:** commit `1c8c401`
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-10-06
 
 ---
 
@@ -198,13 +198,15 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 **7. `validateRow` corrections are discarded on exactly the rows that needed them**
 - `src/OCR/ocrService.ts:192-221` — **an inverted condition**
-- `finalCols = validation.correctedColumns` is assigned in the `else` at `:220` and inside
-  `if (healed)` at `:217`, but **not** when the low-confidence branch is taken and nothing
+- `finalCols = validation.correctedColumns` was assigned in the `else` at `:220` and inside
+  `if (healed)` at `:217`, but **not** when the low-confidence branch was taken and nothing
   healed. So every per-column `correctCellText` normalization (name title-casing, numeric
-  letter→digit repair, status mapping — `dataCorrector.ts:139-142`) is applied **only to rows
+  letter→digit repair, status mapping — `dataCorrector.ts:139-142`) was applied **only to rows
   that already had high confidence**, which are precisely the rows that did not need it.
-- **Fix:** assign `finalCols = validation.correctedColumns` unconditionally after the fallback
-  loop, then overwrite with the healed result if `healed`. Remove the `else`.
+- **Fix:** assigned `finalCols = validation.correctedColumns` unconditionally after the fallback
+  loop, so corrections are preserved for every row regardless of whether healing ran.
+- **Closed in PR #11** (`fix/ocr-row-corrections-always-applied`).
+- **Test added:** `src/OCR/ocrService.test.ts` (1 regression case).
 
 **8. Roster/corrections fetch race + swallowed errors**
 - `src/app/attendance/new/page.tsx:22-30, 61-65`
@@ -381,17 +383,16 @@ projection thresholds, `max = 1600`. Each silently changes OCR quality; none is 
 
 ## 4. Testing
 
-- **One test file** for the entire application: `src/matching/matchEngine.test.ts` (vitest).
-- It covers the one module that is pure logic and easy to break — a good instinct — but the
-  surface it guards is small next to what is untested.
-- **Untested:** the entire OCR pipeline (`ocrService`, `tableSegmenter`, `computerVision`,
-  `dataCorrector`, `semanticAnalyzer`), all Supabase access, all routes and components, and —
-  critically — `database/schema.sql`, which is the actual enforcement point for attendance
+- **Test files:** `src/matching/matchEngine.test.ts`, `src/OCR/ocrService.test.ts` (vitest).
+- They cover the two modules that are pure logic and easy to break — a good instinct — but the
+  surface they guard is small next to what is untested.
+- **Untested:** the entire Supabase access, all routes and components, and — critically —
+  `database/schema.sql`, which is the actual enforcement point for attendance
   writes.
 - **The one tested approval component never runs in production** (#11), so the approval path has
   effectively **zero** coverage of the code that matters.
-- **Highest-value new tests:** (a) the UUID-substring regression (#1), (b) the
-  exact-over-correction precedence (#12), (c) the `serial` header misclassification (#9), and
+- **Highest-value new tests:** (a) the OCR correction-contract regression (`src/OCR/ocrService.test.ts`),
+  (b) the UUID-substring regression (#1), (c) the exact-over-correction precedence (#12), and
   (d) SQL tests for `approve_session` (#28).
 
 ---
@@ -409,8 +410,9 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | Date | Branch | Task | PR | Result |
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
+| 2026-10-06 | `fix/ocr-row-corrections-always-applied` | P1 #7 — validateRow corrections discarded | #11 | Closed #7; 4/4 tests pass, lint 0 errors, tsc clean |
 
-**Remaining backlog:** 6 × P0, 19 × P1, 5 × P2, 8 × P3 = **38 open items**.
+**Remaining backlog:** 6 × P0, 18 × P1, 5 × P2, 8 × P3 = **37 open items**.
 
 ---
 
