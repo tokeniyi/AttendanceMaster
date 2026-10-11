@@ -222,13 +222,14 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   happens inside the pipeline before the operator ever sees the row.
 - **Fix:** `/\b(?:sr|no|serial)\b\.?|^#/i`. Add the regression cases from #21.
 
-**10. Two forked column-type inference implementations that already disagree**
+**10. Two forked column-type inference implementations that already disagree** ✅ **DONE**
 - `src/lib/semanticAnalyzer.ts:214-238` vs `src/app/sessions/[id]/page.tsx:53-70`
 - **Verified by execution:** the page's copy labels `Present`/`Absent`/`LWP` as `numeric` because
   it tests that regex (`:64`) *before* `/status/`, and lacks `date`/`text` entirely. The page then
   feeds those types into `COLUMN_TYPE_CONFIG` imported *from* the analyzer, so the UI badges
   contradict the analyzer's own schema.
 - **Fix:** export `inferType` (or `inferColumnSchema`) and call it from the page.
+- **Fixed in:** `fix/export-shared-column-inference` — exported `inferType` from `semanticAnalyzer.ts`, updated `page.tsx` to use it. Lint and typecheck pass (warnings only). Tests: pre-existing failure in `matchEngine.test.ts` (unrelated duplicate variable, see #1/#12) — no new regressions.
 
 **11. Approval-row filtering is implemented twice; the tested one never runs**
 - `src/services/approval.ts:3-5` (no production caller) vs `database/schema.sql:90`
@@ -409,8 +410,9 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | Date | Branch | Task | PR | Result |
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
+| 2026-10-11 | `fix/export-shared-column-inference` | Export and use shared inferType (P1 #10) | #13 | Merged: unified column-type inference, lint/typecheck pass |
 
-**Remaining backlog:** 6 × P0, 19 × P1, 5 × P2, 8 × P3 = **38 open items**.
+**Remaining backlog:** 6 × P0, 18 × P1, 5 × P2, 8 × P3 = **37 open items**.
 
 ---
 
