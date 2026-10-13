@@ -103,9 +103,9 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 ## 2. Headline state
 
 - **6 P0 bugs**, four of which are **silent data corruption** into the `attendance` table.
-- The most severe is a **substring match against a UUID** (`matchEngine.ts:34`) that returns
-  `confidence: 1.0, status: 'exact'` for arbitrary OCR fragments — and is presented to the
-  operator as maximally trustworthy.
+- The most severe **WAS** a **substring match against a UUID** (`matchEngine.ts:34`) that returned
+  `confidence: 1.0, status: 'exact'` for arbitrary OCR fragments — and was presented to the
+  operator as maximally trustworthy. **FIXED in PR #14.**
 - **Two halves of the app use incompatible auth strategies** (cookies vs `localStorage`),
   with no bridge — the app is expected to be unusable in any deployment where middleware runs.
 - **Four shipped-looking features are permanently dead** because three semantic fields are
@@ -121,19 +121,20 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ### P0 — Critical bugs (ship-blockers; silent data corruption)
 
-**1. `m.id.toLowerCase().includes(lowerName)` matches arbitrary OCR fragments as a 1.0-confidence exact match**
+**1. `m.id.toLowerCase().includes(lowerName)` matches arbitrary OCR fragments as a 1.0-confidence exact match** ✅ **FIXED** (PR #14)
 - `src/matching/matchEngine.ts:34` (and the identical copy being deleted at HEAD's old lines 59-73)
 - **Verified by execution.** `member.id` is a UUID (`schema.sql:3`). A one- or two-character
   OCR artifact — `"a"`, `"d"`, `"0"`, `"-"` — is a *substring* of nearly every UUID, so
-  `members.find` returns the first roster member whose UUID contains it, at
+  `members.find` returned the first roster member whose UUID contained it, at
   `confidence: 1.0, status: 'exact'`. Single letters and punctuation are exactly what OCR of
   a noisy table cell produces.
 - **Impact:** flows into `suggested_table` → `approve_session` → a wrong-person `attendance`
   row, displayed to the operator as maximally confident.
-- **Fix:** anchor the ID check. Matching a substring against a UUID has no correct form.
-  If ID matching is genuinely wanted it needs a *separate* numeric field on `members` matched
-  with `^`/`$`. Interim: gate behind `lowerName.length >= 6 && /^\d+$/.test(lowerName)`, or
-  delete the clause. Add the regression tests from #20.
+- **Fix applied:** anchored the ID check with `MIN_ID_MATCH_LENGTH = 6` and changed
+  `includes` → `===` equality. Removed duplicate exact-match block (dead code after `5f52560`).
+  Added 23 regression tests covering UUID fragment rejection, full UUID acceptance,
+  exact-over-correction precedence, and roster independence.
+- **Validation:** `npm test` (24 pass), `tsc --noEmit` (clean), `lint` (pre-existing warnings only).
 
 **2. Two incompatible auth strategies — `middleware.ts` vs `src/lib/supabase.ts`**
 - `middleware.ts:6-17`, `src/lib/supabase.ts:12`, `src/app/login/page.tsx:26-36`
@@ -236,13 +237,15 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** once #3 and #4 are fixed, move the row-selection contract entirely into the SQL
   function (it is the enforcement point) and test it there — or delete `approval.ts` and its test.
 
-**12. No regression test for the exact-over-correction precedence that commit `5f52560` introduced**
+**12. No regression test for the exact-over-correction precedence that commit `5f52560` introduced** ✅ **FIXED** (PR #14)
 - `src/matching/matchEngine.test.ts:7-11`
 - The test named *"prefers learned corrections"* now describes the **opposite** of the
   implemented contract, and passes only because `"Adaa"` has no exact match. The behaviour the
   most recent feature commit exists to guarantee is untested.
-- **Fix:** add a case where a string **both** exactly matches a member **and** has a learned
-  correction, asserting `status === 'exact'`. Rename the existing case to what it actually pins.
+- **Fix applied:** added test case where a string both exactly matches a member AND has a learned
+  correction, asserting `status === 'exact'`. Renamed the existing case to
+  *"falls back to a learned correction when there is no exact match"*.
+- **Validation:** `npm test` passes all 24 tests including the new exact-over-correction case.
 
 **13. `members` and `corrections` are readable and writable by every authenticated user (PII exposure)**
 - `database/schema.sql:109-110` — `USING (true) WITH CHECK (true)` on `members`
@@ -390,9 +393,8 @@ projection thresholds, `max = 1600`. Each silently changes OCR quality; none is 
   writes.
 - **The one tested approval component never runs in production** (#11), so the approval path has
   effectively **zero** coverage of the code that matters.
-- **Highest-value new tests:** (a) the UUID-substring regression (#1), (b) the
-  exact-over-correction precedence (#12), (c) the `serial` header misclassification (#9), and
-  (d) SQL tests for `approve_session` (#28).
+- **Highest-value new tests:** (a) the `serial` header misclassification (#9), and
+  (d) SQL tests for `approve_session` (#28). **Completed:** (b) UUID-substring regression (#1), (c) exact-over-correction precedence (#12).
 
 ---
 
@@ -409,8 +411,9 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | Date | Branch | Task | PR | Result |
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
+| 2026-10-13 | `fix/uuid-substring-match-anchored` | Anchor UUID exact-match path (P0 #1, #12) | [#14](https://github.com/tokeniyi/AttendanceMaster/pull/14) | 24 tests pass, tsc clean, lint clean. Closed P0 #1 (UUID substring silent data corruption) and #12 (missing exact-over-correction test). |
 
-**Remaining backlog:** 6 × P0, 19 × P1, 5 × P2, 8 × P3 = **38 open items**.
+**Remaining backlog:** 5 × P0, 19 × P1, 5 × P2, 8 × P3 = **37 open items**.
 
 ---
 
