@@ -298,11 +298,13 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   `finally`. The preview `<img src={image}>` at `:227` then renders a broken image for the rest
   of the page's life, including the "Image loaded" branch at `:231-235` shown after an error.
 
-**20. `NaN` analytics on an empty table**
-- `src/app/sessions/[id]/success/page.tsx:158, 161` — `0/0` when `finalTable.length === 0`.
-  **Verified by execution:** `dataQualityIndex = NaN`, and `width: 'NaN%'` is invalid CSS.
-  `final_table` is nullable in practice (e.g. navigating directly to a `pending` session).
-- **Fix:** guard the division and early-return an empty state.
+**20. `NaN` analytics on an empty table** — ✅ CLOSED via PR #15
+|- `src/app/sessions/[id]/success/page.tsx:158, 161` — `0/0` when `finalTable.length === 0`.
+|  **Verified by execution:** `dataQualityIndex = NaN`, and `width: 'NaN%'` is invalid CSS.
+|  `final_table` is nullable in practice (e.g. navigating directly to a `pending` session).
+|- **Fix (applied):** extracted `computeDataQualityIndex()` to `src/lib/analytics.ts`,
+|  returns 0 for empty input; added early-return empty state in the success page;
+|  5 regression tests in `src/lib/analytics.test.ts`.
 
 **21. Keyboard handler closes over stale `history`**
 - `src/app/sessions/[id]/page.tsx:113-124` — undo/redo state read from a stale closure.
@@ -414,6 +416,9 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | 2026-10-13 | `fix/uuid-substring-match-anchored` | Anchor UUID exact-match path (P0 #1, #12) | [#14](https://github.com/tokeniyi/AttendanceMaster/pull/14) | 24 tests pass, tsc clean, lint clean. Closed P0 #1 (UUID substring silent data corruption) and #12 (missing exact-over-correction test). |
 
 **Remaining backlog:** 5 × P0, 19 × P1, 5 × P2, 8 × P3 = **37 open items**.
+| 2026-10-18 | `fix/nan-analytics-empty-table` | P1 #20: NaN analytics on empty final_table | [#15](https://github.com/tokeniyi/AttendanceMaster/pull/15) | 5/5 analytics tests pass; eslint clean on changed files; tsc shows only 2 pre-existing matchEngine.ts errors; **newly discovered**: main does not typecheck — duplicate `const exactMatch` in matchEngine.ts:31 vs :59 (covered by PR #6) |
+
+**Remaining backlog:** 6 × P0, 18 × P1, 5 × P2, 8 × P3 = **37 open items**.
 
 ---
 
