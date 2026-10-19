@@ -211,7 +211,7 @@ export function inferColumnSchema(
   });
 }
 
-function inferType(label: string, samples: string[]): ColumnType {
+export function inferType(label: string, samples: string[]): ColumnType {
   const lowerLabel = label.toLowerCase();
 
   if (/sr\.?|no\.?|#|serial/i.test(lowerLabel)) return 'serial';

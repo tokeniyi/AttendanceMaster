@@ -102,9 +102,13 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ## 2. Headline state
 
+- **5 P0 bugs** (P0 #1 fixed in PR #14), of which four **were** **silent data corruption** into the `attendance` table.
 - **6 P0 bugs**, four of which are **silent data corruption** into the `attendance` table.
 - The most severe was a **substring match against a UUID** (`matchEngine.ts:34`) that returned
   `confidence: 1.0, status: 'exact'` for arbitrary OCR fragments — **FIXED in `fix/roster-fetch-race`**.
+- The most severe **WAS** a **substring match against a UUID** (`matchEngine.ts:34`) that returned
+  `confidence: 1.0, status: 'exact'` for arbitrary OCR fragments — and was presented to the
+  operator as maximally trustworthy. **FIXED in PR #14.**
 - **Two halves of the app use incompatible auth strategies** (cookies vs `localStorage`),
   with no bridge — the app is expected to be unusable in any deployment where middleware runs.
 - **Four shipped-looking features are permanently dead** because three semantic fields are
@@ -121,10 +125,11 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 ### P0 — Critical bugs (ship-blockers; silent data corruption)
 
 **1. `m.id.toLowerCase().includes(lowerName)` matches arbitrary OCR fragments as a 1.0-confidence exact match** — **FIXED** ✅
+**1. `m.id.toLowerCase().includes(lowerName)` matches arbitrary OCR fragments as a 1.0-confidence exact match** ✅ **FIXED** (PR #14)
 - `src/matching/matchEngine.ts:34` (and the identical copy being deleted at HEAD's old lines 59-73)
 - **Verified by execution.** `member.id` is a UUID (`schema.sql:3`). A one- or two-character
   OCR artifact — `"a"`, `"d"`, `"0"`, `"-"` — is a *substring* of nearly every UUID, so
-  `members.find` returns the first roster member whose UUID contains it, at
+  `members.find` returned the first roster member whose UUID contained it, at
   `confidence: 1.0, status: 'exact'`. Single letters and punctuation are exactly what OCR of
   a noisy table cell produces.
 - **Impact:** flows into `suggested_table` → `approve_session` → a wrong-person `attendance`
@@ -133,6 +138,11 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   `lowerName.length >= 6 && m.id.toLowerCase() === lowerName` (whole UUID equality). Removed
   the duplicate exact-match block. Added 5 regression tests in `matchEngine.test.ts`.
 - **Closed by:** `fix/roster-fetch-race` (PR #12)
+- **Fix applied:** anchored the ID check with `MIN_ID_MATCH_LENGTH = 6` and changed
+  `includes` → `===` equality. Removed duplicate exact-match block (dead code after `5f52560`).
+  Added 23 regression tests covering UUID fragment rejection, full UUID acceptance,
+  exact-over-correction precedence, and roster independence.
+- **Validation:** `npm test` (24 pass), `tsc --noEmit` (clean), `lint` (pre-existing warnings only).
 
 **2. Two incompatible auth strategies — `middleware.ts` vs `src/lib/supabase.ts`**
 - `middleware.ts:6-17`, `src/lib/supabase.ts:12`, `src/app/login/page.tsx:26-36`
@@ -224,13 +234,14 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   happens inside the pipeline before the operator ever sees the row.
 - **Fix:** `/\b(?:sr|no|serial)\b\.?|^#/i`. Add the regression cases from #21.
 
-**10. Two forked column-type inference implementations that already disagree**
+**10. Two forked column-type inference implementations that already disagree** ✅ **DONE**
 - `src/lib/semanticAnalyzer.ts:214-238` vs `src/app/sessions/[id]/page.tsx:53-70`
 - **Verified by execution:** the page's copy labels `Present`/`Absent`/`LWP` as `numeric` because
   it tests that regex (`:64`) *before* `/status/`, and lacks `date`/`text` entirely. The page then
   feeds those types into `COLUMN_TYPE_CONFIG` imported *from* the analyzer, so the UI badges
   contradict the analyzer's own schema.
 - **Fix:** export `inferType` (or `inferColumnSchema`) and call it from the page.
+- **Fixed in:** `fix/export-shared-column-inference` — exported `inferType` from `semanticAnalyzer.ts`, updated `page.tsx` to use it. Lint and typecheck pass (warnings only). Tests: pre-existing failure in `matchEngine.test.ts` (unrelated duplicate variable, see #1/#12) — no new regressions.
 
 **11. Approval-row filtering is implemented twice; the tested one never runs**
 - `src/services/approval.ts:3-5` (no production caller) vs `database/schema.sql:90`
@@ -238,7 +249,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** once #3 and #4 are fixed, move the row-selection contract entirely into the SQL
   function (it is the enforcement point) and test it there — or delete `approval.ts` and its test.
 
-**12. No regression test for the exact-over-correction precedence that commit `5f52560` introduced** — **FIXED** ✅
+**12. No regression test for the exact-over-correction precedence that commit `5f52560` introduced** ✅ **FIXED** (PR #14)
 - `src/matching/matchEngine.test.ts:7-11`
 - The test named *"prefers learned corrections"* now describes the **opposite** of the
   implemented contract, and passes only because `"Adaa"` has no exact match. The behaviour the
@@ -299,11 +310,13 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   `finally`. The preview `<img src={image}>` at `:227` then renders a broken image for the rest
   of the page's life, including the "Image loaded" branch at `:231-235` shown after an error.
 
-**20. `NaN` analytics on an empty table**
-- `src/app/sessions/[id]/success/page.tsx:158, 161` — `0/0` when `finalTable.length === 0`.
-  **Verified by execution:** `dataQualityIndex = NaN`, and `width: 'NaN%'` is invalid CSS.
-  `final_table` is nullable in practice (e.g. navigating directly to a `pending` session).
-- **Fix:** guard the division and early-return an empty state.
+**20. `NaN` analytics on an empty table** — ✅ CLOSED via PR #15
+|- `src/app/sessions/[id]/success/page.tsx:158, 161` — `0/0` when `finalTable.length === 0`.
+|  **Verified by execution:** `dataQualityIndex = NaN`, and `width: 'NaN%'` is invalid CSS.
+|  `final_table` is nullable in practice (e.g. navigating directly to a `pending` session).
+|- **Fix (applied):** extracted `computeDataQualityIndex()` to `src/lib/analytics.ts`,
+|  returns 0 for empty input; added early-return empty state in the success page;
+|  5 regression tests in `src/lib/analytics.test.ts`.
 
 **21. Keyboard handler closes over stale `history`**
 - `src/app/sessions/[id]/page.tsx:113-124` — undo/redo state read from a stale closure.
@@ -316,10 +329,14 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** implement real polarity detection, or surface a clear "dark-background scans are not
   supported" error rather than emitting a garbage grid.
 
-**23. `login/page.tsx:26` has no try/catch** — `getSupabaseClient()` throws when env vars are
+**23. `login/page.tsx:26` has no try/catch** ✅ **FIXED** (PR #16) — `getSupabaseClient()` throws when env vars are
 missing, through the Proxy at `supabase.ts:17-21` on first property access. The throw skips the
 `if (error)` branch, so `isLoading` stays `true` forever — a permanently disabled button with no
 message. Same class of problem for every unguarded `supabase.*` call.
+- **Fix (applied):** extracted `getAuthErrorMessage()` to `src/lib/authErrors.ts`; wrapped
+  `supabase.auth.signInWithPassword` in try/catch/finally in `login/page.tsx`; `setIsLoading(false)`
+  now always runs in `finally`. 3 regression tests in `src/lib/authErrors.test.ts`.
+- **Validation:** `npm test` (6 pass), `tsc --noEmit` (clean), `lint` (0 errors, 4 pre-existing warnings).
 
 **24. Worker count is not adaptive in a useful way** — `ocrService.ts:74` yields 1 worker on a
 2-core machine and 4 on anything ≥5-core, but each is created sequentially and loads the 3.5 MB
@@ -394,9 +411,10 @@ projection thresholds, `max = 1600`. Each silently changes OCR quality; none is 
   writes.
 - **The one tested approval component never runs in production** (#11), so the approval path has
   effectively **zero** coverage of the code that matters.
-- **Highest-value new tests:** (a) the UUID-substring regression (#1), (b) the
-  exact-over-correction precedence (#12), (c) the `serial` header misclassification (#9), and
-  (d) SQL tests for `approve_session` (#28).
+- **Highest-value new tests:** (a) the `serial` header misclassification (#9), and
+  (d) SQL tests for `approve_session` (#28). **Completed:** (b) UUID-substring regression (#1),
+  (c) exact-over-correction precedence (#12).
+  (d) SQL tests for `approve_session` (#28). **Completed:** (b) UUID-substring regression (#1), (c) exact-over-correction precedence (#12).
 
 ---
 
@@ -421,8 +439,10 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 
 ## 7. Note on the uncommitted working-tree change — **RESOLVED**
 
-At review time the working tree carried one uncommitted modification to
-`src/matching/matchEngine.ts` (16 lines removed, 1 added).
+At review time the working tree carried uncommitted modifications to four files:
+`src/matching/matchEngine.ts` (the de-duplication described below), and
+`database/schema.sql`, `src/types/index.ts`, `src/app/members/page.tsx` (adding `owner_id`
+columns and tenant-scoped RLS policies for P0 #13). None are committed.
 
 **This was a safe de-duplication, not a regression.** Commit `5f52560` ("prioritize exact matches
 over corrections") already introduced an identical step-0 exact-match block at lines 30-43, which
