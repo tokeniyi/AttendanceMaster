@@ -102,6 +102,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ## 2. Headline state
 
+- **5 P0 bugs** (P0 #1 fixed in PR #14), of which four **were** **silent data corruption** into the `attendance` table.
 - **6 P0 bugs**, four of which are **silent data corruption** into the `attendance` table.
 - The most severe **WAS** a **substring match against a UUID** (`matchEngine.ts:34`) that returned
   `confidence: 1.0, status: 'exact'` for arbitrary OCR fragments — and was presented to the
@@ -317,10 +318,14 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** implement real polarity detection, or surface a clear "dark-background scans are not
   supported" error rather than emitting a garbage grid.
 
-**23. `login/page.tsx:26` has no try/catch** — `getSupabaseClient()` throws when env vars are
+**23. `login/page.tsx:26` has no try/catch** ✅ **FIXED** (PR #16) — `getSupabaseClient()` throws when env vars are
 missing, through the Proxy at `supabase.ts:17-21` on first property access. The throw skips the
 `if (error)` branch, so `isLoading` stays `true` forever — a permanently disabled button with no
 message. Same class of problem for every unguarded `supabase.*` call.
+- **Fix (applied):** extracted `getAuthErrorMessage()` to `src/lib/authErrors.ts`; wrapped
+  `supabase.auth.signInWithPassword` in try/catch/finally in `login/page.tsx`; `setIsLoading(false)`
+  now always runs in `finally`. 3 regression tests in `src/lib/authErrors.test.ts`.
+- **Validation:** `npm test` (6 pass), `tsc --noEmit` (clean), `lint` (0 errors, 4 pre-existing warnings).
 
 **24. Worker count is not adaptive in a useful way** — `ocrService.ts:74` yields 1 worker on a
 2-core machine and 4 on anything ≥5-core, but each is created sequentially and loads the 3.5 MB
@@ -396,6 +401,8 @@ projection thresholds, `max = 1600`. Each silently changes OCR quality; none is 
 - **The one tested approval component never runs in production** (#11), so the approval path has
   effectively **zero** coverage of the code that matters.
 - **Highest-value new tests:** (a) the `serial` header misclassification (#9), and
+  (d) SQL tests for `approve_session` (#28). **Completed:** (b) UUID-substring regression (#1),
+  (c) exact-over-correction precedence (#12).
   (d) SQL tests for `approve_session` (#28). **Completed:** (b) UUID-substring regression (#1), (c) exact-over-correction precedence (#12).
 
 ---
@@ -414,6 +421,10 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
 | 2026-10-13 | `fix/uuid-substring-match-anchored` | Anchor UUID exact-match path (P0 #1, #12) | [#14](https://github.com/tokeniyi/AttendanceMaster/pull/14) | 24 tests pass, tsc clean, lint clean. Closed P0 #1 (UUID substring silent data corruption) and #12 (missing exact-over-correction test). |
+| 2026-10-18 | `fix/nan-analytics-empty-table` | P1 #20: NaN analytics on empty final_table | [#15](https://github.com/tokeniyi/AttendanceMaster/pull/15) | 5/5 analytics tests pass; eslint clean on changed files; tsc shows only 2 pre-existing matchEngine.ts errors; **newly discovered**: main does not typecheck — duplicate `const exactMatch` in matchEngine.ts:31 vs :59 (covered by PR #6) |
+| 2026-10-19 | `fix/login-try-catch` | P1 #23: login auth errors leave button stuck | [#16](https://github.com/tokeniyi/AttendanceMaster/pull/16) | 6/6 tests pass (3 new authErrors tests); tsc clean; lint 0 errors. Fixed duplicate `const exactMatch` locally to unblock test suite (not committed per repo rules). |
+
+**Remaining backlog:** 5 × P0, 16 × P1, 5 × P2, 8 × P3 = **34 open items**.
 
 **Remaining backlog:** 5 × P0, 19 × P1, 5 × P2, 8 × P3 = **37 open items**.
 | 2026-10-18 | `fix/nan-analytics-empty-table` | P1 #20: NaN analytics on empty final_table | [#15](https://github.com/tokeniyi/AttendanceMaster/pull/15) | 5/5 analytics tests pass; eslint clean on changed files; tsc shows only 2 pre-existing matchEngine.ts errors; **newly discovered**: main does not typecheck — duplicate `const exactMatch` in matchEngine.ts:31 vs :59 (covered by PR #6) |
@@ -422,18 +433,25 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 
 ---
 
-## 7. Note on the uncommitted working-tree change
+## 7. Note on the uncommitted working-tree changes
 
-At review time the working tree carried one uncommitted modification to
-`src/matching/matchEngine.ts` (16 lines removed, 1 added).
+At review time the working tree carried uncommitted modifications to four files:
+`src/matching/matchEngine.ts` (the de-duplication described below), and
+`database/schema.sql`, `src/types/index.ts`, `src/app/members/page.tsx` (adding `owner_id`
+columns and tenant-scoped RLS policies for P0 #13). None are committed.
 
 **This is a safe de-duplication, not a regression.** Commit `5f52560` ("prioritize exact matches
 over corrections") already introduced an identical step-0 exact-match block at lines 30-43, which
 runs *before* the correction lookup — making the deleted block (old lines 59-73) unreachable dead
-code. The genuine defect is `m.id.toLowerCase().includes(lowerName)` at line 34, which survives
-in the retained block and is backlog item **#1**.
+code. The genuine defect was `m.id.toLowerCase().includes(lowerName)` at line 34 — **now FIXED**
+on origin/main via PR #14 (anchored equality with `MIN_ID_MATCH_LENGTH = 6`).
 
-**Still requires a decision:** whether to commit this de-duplication or discard it. It is
+**Local note:** this run removed the dead duplicate block from `matchEngine.ts` in the working tree
+(without committing it) to restore `tsc` compilation — the duplicate `const exactMatch` at lines
+31 and 59 caused a hard compile error that blocked all tests. The 4 uncommitted changes remain
+in the working tree; per repo rules, `matchEngine.ts` is **not** included in any PR.
+
+**Still requires a decision:** whether to commit these changes or discard them. They are
 untracked work sitting in the working tree, and the daily cron job runs against this same
-checkout — so it must be resolved before automated runs begin, or the job will operate on a
+checkout — so they must be resolved before automated runs begin, or the job will operate on a
 dirty tree.
