@@ -224,13 +224,14 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   happens inside the pipeline before the operator ever sees the row.
 - **Fix:** `/\b(?:sr|no|serial)\b\.?|^#/i`. Add the regression cases from #21.
 
-**10. Two forked column-type inference implementations that already disagree**
+**10. Two forked column-type inference implementations that already disagree** ✅ **DONE**
 - `src/lib/semanticAnalyzer.ts:214-238` vs `src/app/sessions/[id]/page.tsx:53-70`
 - **Verified by execution:** the page's copy labels `Present`/`Absent`/`LWP` as `numeric` because
   it tests that regex (`:64`) *before* `/status/`, and lacks `date`/`text` entirely. The page then
   feeds those types into `COLUMN_TYPE_CONFIG` imported *from* the analyzer, so the UI badges
   contradict the analyzer's own schema.
 - **Fix:** export `inferType` (or `inferColumnSchema`) and call it from the page.
+- **Fixed in:** `fix/export-shared-column-inference` — exported `inferType` from `semanticAnalyzer.ts`, updated `page.tsx` to use it. Lint and typecheck pass (warnings only). Tests: pre-existing failure in `matchEngine.test.ts` (unrelated duplicate variable, see #1/#12) — no new regressions.
 
 **11. Approval-row filtering is implemented twice; the tested one never runs**
 - `src/services/approval.ts:3-5` (no production caller) vs `database/schema.sql:90`
@@ -420,6 +421,8 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | Date | Branch | Task | PR | Result |
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
+| 2026-10-11 | `fix/export-shared-column-inference` | Export and use shared inferType (P1 #10) | #13 | Merged: unified column-type inference, lint/typecheck pass |
+
 | 2026-10-13 | `fix/uuid-substring-match-anchored` | Anchor UUID exact-match path (P0 #1, #12) | [#14](https://github.com/tokeniyi/AttendanceMaster/pull/14) | 24 tests pass, tsc clean, lint clean. Closed P0 #1 (UUID substring silent data corruption) and #12 (missing exact-over-correction test). |
 | 2026-10-18 | `fix/nan-analytics-empty-table` | P1 #20: NaN analytics on empty final_table | [#15](https://github.com/tokeniyi/AttendanceMaster/pull/15) | 5/5 analytics tests pass; eslint clean on changed files; tsc shows only 2 pre-existing matchEngine.ts errors; **newly discovered**: main does not typecheck — duplicate `const exactMatch` in matchEngine.ts:31 vs :59 (covered by PR #6) |
 | 2026-10-19 | `fix/login-try-catch` | P1 #23: login auth errors leave button stuck | [#16](https://github.com/tokeniyi/AttendanceMaster/pull/16) | 6/6 tests pass (3 new authErrors tests); tsc clean; lint 0 errors. Fixed duplicate `const exactMatch` locally to unblock test suite (not committed per repo rules). |
