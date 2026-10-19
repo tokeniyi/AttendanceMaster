@@ -103,6 +103,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 ## 2. Headline state
 
 - **5 P0 bugs** (P0 #1 fixed in PR #14), of which four **were** **silent data corruption** into the `attendance` table.
+- **6 P0 bugs**, four of which are **silent data corruption** into the `attendance` table.
 - The most severe **WAS** a **substring match against a UUID** (`matchEngine.ts:34`) that returned
   `confidence: 1.0, status: 'exact'` for arbitrary OCR fragments — and was presented to the
   operator as maximally trustworthy. **FIXED in PR #14.**
@@ -402,6 +403,7 @@ projection thresholds, `max = 1600`. Each silently changes OCR quality; none is 
 - **Highest-value new tests:** (a) the `serial` header misclassification (#9), and
   (d) SQL tests for `approve_session` (#28). **Completed:** (b) UUID-substring regression (#1),
   (c) exact-over-correction precedence (#12).
+  (d) SQL tests for `approve_session` (#28). **Completed:** (b) UUID-substring regression (#1), (c) exact-over-correction precedence (#12).
 
 ---
 
@@ -423,6 +425,11 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | 2026-10-19 | `fix/login-try-catch` | P1 #23: login auth errors leave button stuck | [#16](https://github.com/tokeniyi/AttendanceMaster/pull/16) | 6/6 tests pass (3 new authErrors tests); tsc clean; lint 0 errors. Fixed duplicate `const exactMatch` locally to unblock test suite (not committed per repo rules). |
 
 **Remaining backlog:** 5 × P0, 16 × P1, 5 × P2, 8 × P3 = **34 open items**.
+
+**Remaining backlog:** 5 × P0, 19 × P1, 5 × P2, 8 × P3 = **37 open items**.
+| 2026-10-18 | `fix/nan-analytics-empty-table` | P1 #20: NaN analytics on empty final_table | [#15](https://github.com/tokeniyi/AttendanceMaster/pull/15) | 5/5 analytics tests pass; eslint clean on changed files; tsc shows only 2 pre-existing matchEngine.ts errors; **newly discovered**: main does not typecheck — duplicate `const exactMatch` in matchEngine.ts:31 vs :59 (covered by PR #6) |
+
+**Remaining backlog:** 6 × P0, 18 × P1, 5 × P2, 8 × P3 = **37 open items**.
 
 ---
 
