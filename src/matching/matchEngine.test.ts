@@ -1,20 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { matchMembers } from "./matchEngine";
 
-// Realistic UUIDs, as used by database/schema.sql.
-const ada = {
-  id: "3f2b1a4c-9d8e-4f7a-b6c5-1a2b3c4d5e6f",
-  full_name: "Ada Lovelace",
-  aliases: ["Ada"],
-  created_at: "",
+const member = { id: "m1", full_name: "Ada Lovelace", aliases: ["Ada"], created_at: "" };
+const memberWithUuid = { 
+  id: "550e8400-e29b-41d4-a716-446655440000", 
+  full_name: "Test User", 
+  aliases: ["Test"], 
+  created_at: "" 
 };
-const grace = {
-  id: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
-  full_name: "Grace Hopper",
-  aliases: [],
-  created_at: "",
-};
-const roster = [ada, grace];
 
 describe("matchMembers", () => {
   it("matches a full name exactly", () => {
@@ -130,14 +123,46 @@ describe("matchMembers", () => {
     expect(matchMembers(["Unknown"], [], [])[0].status).toBe("none");
   });
 
-  it("returns no match for text unrelated to the roster", () => {
-    const [result] = matchMembers(["Zzzzz Qqqqq"], roster, []);
-    expect(result.suggestedMember).toBeNull();
+  // Regression test for P0 #1: UUID substring matching
+  it("does not match single-character OCR artifacts against UUIDs", () => {
+    const [result] = matchMembers(["a"], [memberWithUuid], []);
     expect(result.status).toBe("none");
+    expect(result.suggestedMember).toBeNull();
   });
 
-  it("tolerates a member with no aliases", () => {
-    const [result] = matchMembers(["Ada Lovelace"], [grace], []);
+  it("does not match two-character OCR artifacts against UUIDs", () => {
+    const [result] = matchMembers(["55"], [memberWithUuid], []);
     expect(result.status).toBe("none");
+    expect(result.suggestedMember).toBeNull();
+  });
+
+  it("does not match partial UUID fragments (dashes, digits)", () => {
+    const [result] = matchMembers(["-"], [memberWithUuid], []);
+    expect(result.status).toBe("none");
+    expect(result.suggestedMember).toBeNull();
+  });
+
+  it("matches full UUID when provided as exact ID", () => {
+    const [result] = matchMembers(["550e8400-e29b-41d4-a716-446655440000"], [memberWithUuid], []);
+    expect(result.status).toBe("exact");
+    expect(result.suggestedMember?.id).toBe("550e8400-e29b-41d4-a716-446655440000");
+  });
+
+  // Regression test for P0 #12: exact-over-correction precedence
+  it("prefers exact name match over learned correction when both apply", () => {
+    const correctionMember = { 
+      id: "m2", 
+      full_name: "Ada Lovelace",  // Same name as member
+      aliases: [], 
+      created_at: "" 
+    };
+    const [result] = matchMembers(
+      ["Ada Lovelace"], 
+      [member, correctionMember], 
+      [{ id: "c1", incorrect_text: "Ada Lovelace", corrected_member_id: "m2", frequency: 5, created_at: "" }]
+    );
+    // Should match the first member by exact name, not the correction
+    expect(result.status).toBe("exact");
+    expect(result.suggestedMember?.id).toBe("m1");
   });
 });

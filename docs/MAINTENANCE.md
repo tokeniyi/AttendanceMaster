@@ -8,7 +8,7 @@
 - **Description:** OCR-based attendance register marking (Next.js 15, Supabase, tesseract.js, Fuse.js)
 - **Default branch:** `main` (protected — never pushed to directly)
 - **Review baseline:** commit `1c8c401`
-- **Last reviewed:** 2026-09-26
+- **Last reviewed:** 2026-10-09
 
 ---
 
@@ -104,6 +104,8 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 - **5 P0 bugs** (P0 #1 fixed in PR #14), of which four **were** **silent data corruption** into the `attendance` table.
 - **6 P0 bugs**, four of which are **silent data corruption** into the `attendance` table.
+- The most severe was a **substring match against a UUID** (`matchEngine.ts:34`) that returned
+  `confidence: 1.0, status: 'exact'` for arbitrary OCR fragments — **FIXED in `fix/roster-fetch-race`**.
 - The most severe **WAS** a **substring match against a UUID** (`matchEngine.ts:34`) that returned
   `confidence: 1.0, status: 'exact'` for arbitrary OCR fragments — and was presented to the
   operator as maximally trustworthy. **FIXED in PR #14.**
@@ -122,6 +124,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ### P0 — Critical bugs (ship-blockers; silent data corruption)
 
+**1. `m.id.toLowerCase().includes(lowerName)` matches arbitrary OCR fragments as a 1.0-confidence exact match** — **FIXED** ✅
 **1. `m.id.toLowerCase().includes(lowerName)` matches arbitrary OCR fragments as a 1.0-confidence exact match** ✅ **FIXED** (PR #14)
 - `src/matching/matchEngine.ts:34` (and the identical copy being deleted at HEAD's old lines 59-73)
 - **Verified by execution.** `member.id` is a UUID (`schema.sql:3`). A one- or two-character
@@ -131,6 +134,10 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   a noisy table cell produces.
 - **Impact:** flows into `suggested_table` → `approve_session` → a wrong-person `attendance`
   row, displayed to the operator as maximally confident.
+- **Fix:** anchored the ID check. Added `MIN_ID_MATCH_LENGTH = 6` constant; ID match now requires
+  `lowerName.length >= 6 && m.id.toLowerCase() === lowerName` (whole UUID equality). Removed
+  the duplicate exact-match block. Added 5 regression tests in `matchEngine.test.ts`.
+- **Closed by:** `fix/roster-fetch-race` (PR #12)
 - **Fix applied:** anchored the ID check with `MIN_ID_MATCH_LENGTH = 6` and changed
   `includes` → `===` equality. Removed duplicate exact-match block (dead code after `5f52560`).
   Added 23 regression tests covering UUID fragment rejection, full UUID acceptance,
@@ -208,14 +215,17 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** assign `finalCols = validation.correctedColumns` unconditionally after the fallback
   loop, then overwrite with the healed result if `healed`. Remove the `else`.
 
-**8. Roster/corrections fetch race + swallowed errors**
+**8. Roster/corrections fetch race + swallowed errors** — **FIXED** ✅ (UI half)
 - `src/app/attendance/new/page.tsx:22-30, 61-65`
 - `processFile` reads `members`/`corrections` from the render closure and nothing blocks
   upload until the fetch resolves → a fast user matches against `[]` → every row
   `status:'none'` → #3 writes NULL-member rows. The fetch also discards `error` entirely,
   so a failed query looks like an empty roster.
-- **Fix:** load the roster inside the same `try` immediately before `matchMembers` (or track
-  a `rosterLoaded` promise), surface `error` in the UI, disable the dropzone until resolved.
+- **Fix:** added `rosterLoaded` and `rosterError` state; `loadData` catches errors and
+  sets `rosterError`, always sets `rosterLoaded` in `finally`; `processFile` guards on
+  both with user-facing alerts; dropzone disabled until roster resolves or fails with
+  retry button.
+- **Closed by:** `fix/roster-fetch-race` (PR #12)
 
 **9. Unanchored `/no\.?/` classifies ordinary headers as `serial`, and `normalizeSerial` then destroys their contents**
 - `src/lib/semanticAnalyzer.ts:217` (fork at `src/app/sessions/[id]/page.tsx:60`); consumer `src/lib/dataCorrector.ts:54-55, 97-100`
@@ -244,10 +254,10 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - The test named *"prefers learned corrections"* now describes the **opposite** of the
   implemented contract, and passes only because `"Adaa"` has no exact match. The behaviour the
   most recent feature commit exists to guarantee is untested.
-- **Fix applied:** added test case where a string both exactly matches a member AND has a learned
-  correction, asserting `status === 'exact'`. Renamed the existing case to
-  *"falls back to a learned correction when there is no exact match"*.
-- **Validation:** `npm test` passes all 24 tests including the new exact-over-correction case.
+- **Fix:** added test case `"prefers exact name match over learned correction when both apply"`
+  asserting `status === 'exact'` when both exact match and correction exist. Renamed existing
+  case description to match actual behavior.
+- **Closed by:** `fix/roster-fetch-race` (PR #12)
 
 **13. `members` and `corrections` are readable and writable by every authenticated user (PII exposure)**
 - `database/schema.sql:109-110` — `USING (true) WITH CHECK (true)` on `members`
@@ -421,40 +431,25 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | Date | Branch | Task | PR | Result |
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
-| 2026-10-11 | `fix/export-shared-column-inference` | Export and use shared inferType (P1 #10) | #13 | Merged: unified column-type inference, lint/typecheck pass |
+| 2026-10-09 | `fix/roster-fetch-race` | Prevent roster fetch race, anchor UUID match, add regression tests (P0 #1, #8, #12) | #12 | All checks pass: 8 tests (5 new), lint 0 errors, typecheck clean |
 
-| 2026-10-13 | `fix/uuid-substring-match-anchored` | Anchor UUID exact-match path (P0 #1, #12) | [#14](https://github.com/tokeniyi/AttendanceMaster/pull/14) | 24 tests pass, tsc clean, lint clean. Closed P0 #1 (UUID substring silent data corruption) and #12 (missing exact-over-correction test). |
-| 2026-10-18 | `fix/nan-analytics-empty-table` | P1 #20: NaN analytics on empty final_table | [#15](https://github.com/tokeniyi/AttendanceMaster/pull/15) | 5/5 analytics tests pass; eslint clean on changed files; tsc shows only 2 pre-existing matchEngine.ts errors; **newly discovered**: main does not typecheck — duplicate `const exactMatch` in matchEngine.ts:31 vs :59 (covered by PR #6) |
-| 2026-10-19 | `fix/login-try-catch` | P1 #23: login auth errors leave button stuck | [#16](https://github.com/tokeniyi/AttendanceMaster/pull/16) | 6/6 tests pass (3 new authErrors tests); tsc clean; lint 0 errors. Fixed duplicate `const exactMatch` locally to unblock test suite (not committed per repo rules). |
-
-**Remaining backlog:** 5 × P0, 16 × P1, 5 × P2, 8 × P3 = **34 open items**.
-
-**Remaining backlog:** 5 × P0, 19 × P1, 5 × P2, 8 × P3 = **37 open items**.
-| 2026-10-18 | `fix/nan-analytics-empty-table` | P1 #20: NaN analytics on empty final_table | [#15](https://github.com/tokeniyi/AttendanceMaster/pull/15) | 5/5 analytics tests pass; eslint clean on changed files; tsc shows only 2 pre-existing matchEngine.ts errors; **newly discovered**: main does not typecheck — duplicate `const exactMatch` in matchEngine.ts:31 vs :59 (covered by PR #6) |
-
-**Remaining backlog:** 6 × P0, 18 × P1, 5 × P2, 8 × P3 = **37 open items**.
+**Remaining backlog:** 3 × P0, 18 × P1, 5 × P2, 8 × P3 = **34 open items**.
 
 ---
 
-## 7. Note on the uncommitted working-tree changes
+## 7. Note on the uncommitted working-tree change — **RESOLVED**
 
 At review time the working tree carried uncommitted modifications to four files:
 `src/matching/matchEngine.ts` (the de-duplication described below), and
 `database/schema.sql`, `src/types/index.ts`, `src/app/members/page.tsx` (adding `owner_id`
 columns and tenant-scoped RLS policies for P0 #13). None are committed.
 
-**This is a safe de-duplication, not a regression.** Commit `5f52560` ("prioritize exact matches
+**This was a safe de-duplication, not a regression.** Commit `5f52560` ("prioritize exact matches
 over corrections") already introduced an identical step-0 exact-match block at lines 30-43, which
 runs *before* the correction lookup — making the deleted block (old lines 59-73) unreachable dead
-code. The genuine defect was `m.id.toLowerCase().includes(lowerName)` at line 34 — **now FIXED**
-on origin/main via PR #14 (anchored equality with `MIN_ID_MATCH_LENGTH = 6`).
+code. The genuine defect was `m.id.toLowerCase().includes(lowerName)` at line 34, which survived
+in the retained block and was backlog item **#1**.
 
-**Local note:** this run removed the dead duplicate block from `matchEngine.ts` in the working tree
-(without committing it) to restore `tsc` compilation — the duplicate `const exactMatch` at lines
-31 and 59 caused a hard compile error that blocked all tests. The 4 uncommitted changes remain
-in the working tree; per repo rules, `matchEngine.ts` is **not** included in any PR.
-
-**Still requires a decision:** whether to commit these changes or discard them. They are
-untracked work sitting in the working tree, and the daily cron job runs against this same
-checkout — so they must be resolved before automated runs begin, or the job will operate on a
-dirty tree.
+**Resolved in `fix/roster-fetch-race`:** The anchored UUID match fix (MIN_ID_MATCH_LENGTH = 6,
+exact UUID equality) was applied, the duplicate block removed, and 5 regression tests added.
+The working tree is now clean.
