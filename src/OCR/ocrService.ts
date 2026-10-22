@@ -206,7 +206,7 @@ export async function performOCR(
                  cellConfs[r][c] = data.confidence;
                  healed = true;
                }
-             } catch {}
+             } catch { }
           }
         }
       }
