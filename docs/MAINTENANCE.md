@@ -206,13 +206,29 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ### P1 — Significant
 
-**7. `validateRow` corrections are discarded on exactly the rows that needed them**
+**7. ~~`validateRow` corrections are discarded on exactly the rows that needed them~~ — DONE 2026-10-05 (`fix/ocr-row-corrections-discarded`)**
 - `src/OCR/ocrService.ts:192-221` — **an inverted condition**
 - `finalCols = validation.correctedColumns` was assigned in the `else` at `:220` and inside
   `if (healed)` at `:217`, but **not** when the low-confidence branch was taken and nothing
   healed. So every per-column `correctCellText` normalization (name title-casing, numeric
   letter→digit repair, status mapping — `dataCorrector.ts:139-142`) was applied **only to rows
   that already had high confidence**, which are precisely the rows that did not need it.
+- **Fix applied:** extracted the Phase 3→Phase 4 decision into an exported pure function
+  `finalizeRowColumns()` in `src/lib/dataCorrector.ts:158-199`, called from `ocrService.ts:184`.
+  Corrections now apply to **every** row. The Phase 4 loop writes healed text into a separate
+  `healedCols` array and re-runs `finalizeRowColumns` on it, so healed values are corrected too.
+  `MIN_ROW_CONFIDENCE = 75` is now a named export instead of a literal in two places.
+- **Why extraction was necessary:** the buggy logic was inline in a ~200-line function
+  requiring 5 tesseract workers + a canvas + WASM, so it was unreachable from a unit test. The
+  control-flow *decision* is now testable with no OCR infrastructure at all.
+- **Tests:** `src/lib/dataCorrector.test.ts` — 10 tests. 3 pin the bug (low-confidence-unhealed,
+  schema-invalid-unhealed, numeric letter-confusion), 7 pin preserved behaviour (threshold
+  boundary at exactly 75, `needsFallback` in both directions, healed-text recomputation, and the
+  `healedColumns === null` sentinel vs empty-array distinction). **Mutation-verified:**
+  reintroducing the old branch fails exactly the 3 bug tests and passes all 7 guards.
+- **Newly discovered while testing:** `validateRow([], n, …)` pads to `n` empty cells rather
+  than returning `[]`, so a falsy-but-present `healedColumns` must be distinguished with
+  `=== null`, not truthiness. Pinned by a test.
 - **Fix:** assigned `finalCols = validation.correctedColumns` unconditionally after the fallback
   loop, so corrections are preserved for every row regardless of whether healing ran.
 - **Closed in PR #11** (`fix/ocr-row-corrections-always-applied`).
@@ -405,6 +421,19 @@ projection thresholds, `max = 1600`. Each silently changes OCR quality; none is 
 
 ## 4. Testing
 
+- **One test file** for the entire application: `src/matching/matchEngine.test.ts` (vitest).
+- It covers the one module that is pure logic and easy to break — a good instinct — but the
+  surface it guards is small next to what is untested.
+- **Untested:** the entire OCR pipeline (`ocrService`, `tableSegmenter`, `computerVision`),
+  all Supabase access, all routes and components, and — critically —
+  `database/schema.sql`, which is the actual enforcement point for attendance
+  writes. *(`dataCorrector` gained coverage 2026-10-05 via #7 — 10 tests on the row
+  finalization contract. `semanticAnalyzer` tests exist on PR #9, not yet on `main`.)*
+- **The one tested approval component never runs in production** (#11), so the approval path has
+  effectively **zero** coverage of the code that matters.
+- **Highest-value new tests:** (a) the UUID-substring regression (#1), (b) the
+  exact-over-correction precedence (#12), and (c) SQL tests for `approve_session` (#28).
+  *(c) for the `serial` header misclassification (#9) was written on PR #9 and is still open.*
 - **Test files:** `src/matching/matchEngine.test.ts`, `src/OCR/ocrService.test.ts` (vitest).
 - They cover the two modules that are pure logic and easy to break — a good instinct — but the
   surface they guard is small next to what is untested.

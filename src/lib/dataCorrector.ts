@@ -152,6 +152,49 @@ export function validateRow(
   };
 }
 
+// ─── Row Finalization (Phase 3 → Phase 4 handoff) ─────────────────────────────
+
+/** Row average confidence below which Phase 4 re-recognition is attempted. */
+export const MIN_ROW_CONFIDENCE = 75;
+
+export interface RowFinalization {
+  /** Final cell text for the row, with per-column corrections applied. */
+  columns: string[];
+  /** Schema issues detected on the row (empty when the row was already clean). */
+  issues: string[];
+  /** True when the row should go through the Phase 4 fallback re-recognition. */
+  needsFallback: boolean;
+}
+
+/**
+ * Decide the final cell text for one OCR row.
+ *
+ * `validateRow` applies the per-column `correctCellText` normalization (name
+ * title-casing, numeric letter→digit repair, status mapping). That normalization
+ * must be applied to *every* row. Previously it was only assigned when the row
+ * skipped Phase 4, so the rows that tripped Phase 4 (low confidence or schema
+ * violation) — the ones most in need of cleanup — kept their raw OCR text.
+ *
+ * When `healedColumns` is supplied, Phase 4 re-recognized at least one cell, so
+ * the corrected output is recomputed from the healed text instead of the raw text.
+ */
+export function finalizeRowColumns(
+  rawColumns: string[],
+  expectedCols: number,
+  colTypes: string[] | undefined,
+  avgConfidence: number,
+  healedColumns: string[] | null = null
+): RowFinalization {
+  const validation = validateRow(healedColumns ?? rawColumns, expectedCols, colTypes);
+  const needsFallback =
+    healedColumns === null && (!validation.isValid || avgConfidence < MIN_ROW_CONFIDENCE);
+  return {
+    columns: validation.correctedColumns,
+    issues: validation.issues,
+    needsFallback,
+  };
+}
+
 // ─── Document-Level Consistency Check ────────────────────────────────────────
 
 export interface DocumentValidation {
