@@ -11,7 +11,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { Session, Member, MatchResult } from "@/types";
 import { cn } from "@/lib/utils";
-import { COLUMN_TYPE_CONFIG, type ColumnType, inferType } from "@/lib/semanticAnalyzer";
+import { COLUMN_TYPE_CONFIG, isSerialLabel, type ColumnType } from "@/lib/semanticAnalyzer";
 
 const CellInput = ({ initialValue, onChange, isHeader }: { initialValue: string, onChange: (val: string) => void, isHeader?: boolean }) => {
   const [val, setVal] = useState(initialValue);
@@ -55,7 +55,16 @@ export default function SessionWorkspace() {
     return Array.from({ length: numCols }, (_, i) => {
       const label = headerRow?.columns?.[i] ?? `Col ${i + 1}`;
       const samples = tableData.filter(r => !r.isHeader).map(r => r.columns?.[i] ?? '').filter(Boolean);
-      const type = inferType(label, samples);
+      const lowerLabel = label.toLowerCase();
+      let type: ColumnType = 'unknown';
+      if (isSerialLabel(lowerLabel)) type = 'serial';
+      else if (/name/i.test(lowerLabel)) type = 'name';
+      else if (/designation|role/i.test(lowerLabel)) type = 'designation';
+      else if (/%|percent/i.test(lowerLabel)) type = 'percentage';
+      else if (/total|working|days|balance|absent|present|lwp|ott/i.test(lowerLabel)) type = 'numeric';
+      else if (/status/i.test(lowerLabel)) type = 'status';
+      else if (samples.length > 0 && samples.filter(s => /^\d+$/.test(s.trim())).length / samples.length > 0.7) type = 'numeric';
+      else if (samples.length > 0) type = 'text';
       return { label, type, colIndex: i };
     });
   }, [tableData, numCols]);
