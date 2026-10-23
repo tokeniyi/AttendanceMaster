@@ -49,7 +49,7 @@ export default function SessionWorkspace() {
   const [isPending, startTransition] = useTransition();
   const imagePanelRef = useRef<HTMLDivElement>(null);
 
-  // Infer column types from header row data
+  // Infer column types from header row data using shared inference
   const colSchemas = useMemo(() => {
     const headerRow = tableData.find(r => r.isHeader);
     return Array.from({ length: numCols }, (_, i) => {
