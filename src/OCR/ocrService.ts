@@ -188,7 +188,7 @@ export async function performOCR(
     // Phase 3: Validate Row Schema
     const validation = validateRow(finalCols, numCols, colTypes);
 
-    // Phase 4: Fallback Loop (Triggered only on confidence < 75 OR schema violation)
+    // Phase 4: Fallback Loop + Correction application
     if (!validation.isValid || avgConf < 75) {
       if (!validation.isValid) explanation += `Corrected: ${validation.issues.join(', ')} | `;
       let healed = false;
@@ -205,20 +205,19 @@ export async function performOCR(
                  cellConfs[r][c] = data.confidence;
                  healed = true;
                }
-             } catch {}
+             } catch { }
           }
         }
       }
       
       if (healed) {
         explanation += `Healed low-confidence cells using fallback model.`;
-        // Re-validate after fallback
-        const reValidation = validateRow(finalCols, numCols, colTypes);
-        finalCols = reValidation.correctedColumns;
       }
-    } else {
-      finalCols = validation.correctedColumns;
     }
+
+    // Always apply validator corrections, even for rows that did not enter
+    // the fallback loop (e.g. low-confidence rows where nothing healed).
+    finalCols = validateRow(finalCols, numCols, colTypes).correctedColumns;
 
     rowConf = cellConfs[r].reduce((s, v) => s + v, 0) / Math.max(1, cellConfs[r].length);
     const text = finalCols.filter(c => c.length > 0).join('  ');
