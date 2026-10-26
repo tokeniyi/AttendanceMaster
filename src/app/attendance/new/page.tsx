@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Upload, Database, ArrowRight, Zap, FileImage, CheckCircle2 } from "lucide-react";
+import { Upload, Database, ArrowRight, Zap, FileImage, CheckCircle2, AlertCircle } from "lucide-react";
 import { performOCR } from "@/OCR/ocrService";
 import { matchMembers } from "@/matching/matchEngine";
 import { supabase } from "@/lib/supabase";
@@ -15,22 +15,40 @@ export default function NewAttendancePage() {
   const [progressPct, setProgressPct] = useState(0);
   const [members, setMembers] = useState<Member[]>([]);
   const [corrections, setCorrections] = useState<Correction[]>([]);
+  const [rosterLoaded, setRosterLoaded] = useState(false);
+  const [rosterError, setRosterError] = useState<string | null>(null);
   const [eventName, setEventName] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function loadData() {
-      const { data: m } = await supabase.from('members').select('*');
-      const { data: c } = await supabase.from('corrections').select('*');
-      if (m) setMembers(m);
-      if (c) setCorrections(c);
+      try {
+        const { data: m, error: mErr } = await supabase.from('members').select('*');
+        const { data: c, error: cErr } = await supabase.from('corrections').select('*');
+        if (mErr) throw mErr;
+        if (cErr) throw cErr;
+        if (m) setMembers(m);
+        if (c) setCorrections(c);
+      } catch (err: any) {
+        setRosterError(err.message || "Failed to load roster");
+      } finally {
+        setRosterLoaded(true);
+      }
     }
     loadData();
   }, []);
 
   const processFile = async (file: File) => {
     if (!file) return;
+    if (!rosterLoaded) {
+      alert("Roster is still loading. Please wait a moment and try again.");
+      return;
+    }
+    if (rosterError) {
+      alert(`Cannot process upload: ${rosterError}`);
+      return;
+    }
     validateUpload(file);
     setIsProcessing(true);
     setProgressPct(0);
@@ -183,11 +201,11 @@ export default function NewAttendancePage() {
           onDrop={handleDrop}
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
-          onClick={() => !isProcessing && inputRef.current?.click()}
+          onClick={() => !isProcessing && rosterLoaded && !rosterError && inputRef.current?.click()}
           className={`
             border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all
             ${dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-primary/[0.01]'}
-            ${isProcessing ? 'cursor-not-allowed' : ''}
+            ${isProcessing || !rosterLoaded || rosterError ? 'cursor-not-allowed opacity-50' : ''}
           `}
         >
           <input
@@ -232,6 +250,24 @@ export default function NewAttendancePage() {
             <div className="flex flex-col items-center gap-4">
               <CheckCircle2 className="h-10 w-10 text-emerald-500" />
               <p className="text-sm font-bold text-emerald-500">Image loaded — starting analysis…</p>
+            </div>
+          ) : !rosterLoaded ? (
+            <div className="space-y-4">
+              <div className="h-10 w-10 mx-auto animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+              <p className="text-sm text-muted-foreground">Loading roster…</p>
+            </div>
+          ) : rosterError ? (
+            <div className="space-y-4 text-center">
+              <div className="h-10 w-10 mx-auto rounded-full bg-destructive/10 flex items-center justify-center">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+              </div>
+              <p className="text-sm text-destructive">Failed to load roster: {rosterError}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest"
+              >
+                Retry
+              </button>
             </div>
           ) : (
             <div className="space-y-6">
