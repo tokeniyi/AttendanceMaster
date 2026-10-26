@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getAuthErrorMessage } from "@/lib/authErrors";
 import { 
   LogIn, 
   Mail, 
@@ -23,16 +24,21 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
-      setError(error.message);
+      if (error) {
+        setError(error.message);
+      } else {
+        router.push("/");
+      }
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    } finally {
       setIsLoading(false);
-    } else {
-      router.push("/");
     }
   };
 

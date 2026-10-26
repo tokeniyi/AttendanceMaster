@@ -20,6 +20,7 @@ import { Session, MatchResult } from "@/types";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { exportAttendanceCSV } from "@/services/csvService";
+import { computeDataQualityIndex } from "@/lib/analytics";
 import Papa from 'papaparse';
 
 export default function SessionSuccessPage() {
@@ -71,6 +72,24 @@ export default function SessionSuccessPage() {
   if (isLoading) return <div className="flex items-center justify-center h-screen bg-background text-sm animate-pulse">Generating Report...</div>;
 
   const finalTable = session?.final_table || [];
+
+  if (finalTable.length === 0) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-12 py-12 px-6">
+        <div className="flex flex-col items-center text-center space-y-6">
+          <div className="h-20 w-20 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+            <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight">Session Finalized</h1>
+            <p className="text-muted-foreground text-lg">
+              No structured data rows were recorded for this session.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-12 py-12 px-6">
@@ -155,10 +174,10 @@ export default function SessionSuccessPage() {
               <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Data Quality Index</span>
-                  <span className="text-xs font-black text-primary">{Math.round((finalTable.filter(r => (r.ocrConfidence || 0) > 80).length / finalTable.length) * 100)}%</span>
+                  <span className="text-xs font-black text-primary">{computeDataQualityIndex(finalTable)}%</span>
                 </div>
                 <div className="h-1.5 w-full bg-primary/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary transition-all duration-1000" style={{ width: `${(finalTable.filter(r => (r.ocrConfidence || 0) > 80).length / finalTable.length) * 100}%` }} />
+                  <div className="h-full bg-primary transition-all duration-1000" style={{ width: `${computeDataQualityIndex(finalTable)}%` }} />
                 </div>
               </div>
 
