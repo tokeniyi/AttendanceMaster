@@ -211,10 +211,34 @@ export function inferColumnSchema(
   });
 }
 
+/**
+ * Header labels that denote a serial-number column.
+ *
+ * These must be matched WHOLE, not as substrings: an unanchored `no` alternative
+ * matches "Notes", "Nomination", "Notional" and "North", and every one of those
+ * would be routed to `normalizeSerial`, which strips all non-digits and turns the
+ * entire column into empty strings (or "1" from "Monthly") before the operator
+ * ever sees the row.
+ */
+const SERIAL_LABEL_PATTERNS: RegExp[] = [
+  /^#/,                                  // "#", "# of Days"
+  /^(?:sr|sno|sl|slno|srno)\b\.?$/i,       // "Sr.", "Sno", "Sl. No"
+  /^no\.?$/i,                             // "No", "No."
+  /\bno\.?$/i,                            // "Roll No", "Sr. No."
+  /^serial\b/i,                           // "Serial", "Serial No"
+  /^number\b/i,                           // "Number"
+  /^s[\s./]?n\.?$/i,                      // "SN", "S/N", "S.N"
+];
+
+export function isSerialLabel(label: string): boolean {
+  const lower = label.trim().toLowerCase();
+  return SERIAL_LABEL_PATTERNS.some(re => re.test(lower));
+}
+
 function inferType(label: string, samples: string[]): ColumnType {
   const lowerLabel = label.toLowerCase();
 
-  if (/sr\.?|no\.?|#|serial/i.test(lowerLabel)) return 'serial';
+  if (isSerialLabel(lowerLabel)) return 'serial';
   if (/name/i.test(lowerLabel)) return 'name';
   if (/designation|role|position|title/i.test(lowerLabel)) return 'designation';
   if (/%|percent/i.test(lowerLabel)) return 'percentage';

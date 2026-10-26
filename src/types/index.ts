@@ -41,6 +41,7 @@ export interface MatchResult {
   columns?: string[]; // Multiple columns from the same row
   emptyCells?: boolean[]; // Structurally suppressed empty cells
   isHeader?: boolean; // If this row is detected as a header
+  rowIndex?: number; // Index of this row in the source document grid
   suggestedMember: Member | null;
   confidence: number;
   ocrConfidence?: number;

@@ -8,18 +8,18 @@
 - **Description:** OCR-based attendance register marking (Next.js 15, Supabase, tesseract.js, Fuse.js)
 - **Default branch:** `main` (protected — never pushed to directly)
 - **Review baseline:** commit `1c8c401`
-- **Last reviewed:** 2026-10-02
+- **Last reviewed:** 2026-10-03
 
-> **Verification caveat (2026-10-02).** Committed `main` does **not** compile: commit
-> `5f52560` added a step-0 exact-match block to `matchEngine.ts` without deleting the
-> pre-existing one, so `const exactMatch` is declared twice in the same block scope
-> (`TS2451`). Verified with `git show HEAD:src/matching/matchEngine.ts`. However this
-> checkout carries that de-duplication **uncommitted** (§7), so `npx tsc --noEmit` exits 0
-> here and will *not* reproduce the failure. Validate against a clean clone or with the
-> change stashed — do not conclude the bug is fixed from this working tree.
-> PR #6 (`fix/anchor-id-exact-match`) is the real fix: it removes the duplicate **and**
-> rewrites the defective `m.id.toLowerCase().includes(lowerName)` predicate that the
-> uncommitted change leaves in place.
+> **CRITICAL — `main` is currently BROKEN (found 2026-10-01).**
+> Commit `5f52560` added a step-0 exact-match block to `matchEngine.ts` but did not delete
+> the pre-existing one at old lines 59-73. Both declare `const exactMatch` in the same
+> block scope, so **`main` does not compile**: `npm test` fails with
+> `The symbol "exactMatch" has already been declared`, `npx tsc --noEmit` reports
+> `TS2451: Cannot redeclare block-scoped variable 'exactMatch'` at lines 31 and 60, and
+> `npm run build` fails. All 5 open PRs are based on this broken `main` and will not pass
+> CI until it is fixed. **This is fixed by branch `fix/anchor-id-exact-match` (backlog
+> #1)** — merge that PR first; the other PRs rebase onto it. Note that the "uncommitted
+> working-tree change" described in §7 is exactly this de-duplication and is the same fix.
 
 ---
 
@@ -113,18 +113,23 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ## 2. Headline state
 
-- **6 P0 bugs**, four of which are **silent data corruption** into the `attendance` table.
-- The most severe is a **substring match against a UUID** (`matchEngine.ts:34`) that returns
-  `confidence: 1.0, status: 'exact'` for arbitrary OCR fragments — and is presented to the
-  operator as maximally trustworthy.
+- **`main` does not compile.** See the banner at the top. Fixed on `fix/anchor-id-exact-match`;
+  all 5 open PRs depend on that being merged.
+- **4 P0 bugs remain open** (#2, #3, #4, #5) — three of which are **silent data corruption**
+  into the `attendance` table. All four are already covered by open PRs #2, #3, #4, #5.
+- The most severe *remaining* bug is **#4** — `flagRow` is advisory only, so rows the operator
+  explicitly flagged as wrong are written to `attendance` as `present = TRUE`. PR #2 fixes the
+  SQL half; the client-side approval gate is still open.
 - **Two halves of the app use incompatible auth strategies** (cookies vs `localStorage`),
   with no bridge — the app is expected to be unusable in any deployment where middleware runs.
+  (PR #3.)
 - **Four shipped-looking features are permanently dead** because three semantic fields are
-  dropped before persistence (the "Approve All Data" button approves *zero rows*).
+  dropped before persistence (the "Approve All Data" button approves *zero rows*). (PR #4.)
 - **Security:** `members` and `corrections` are readable *and writable* by every authenticated
-  user, exposing `full_name`, `email`, `phone`, `department` across tenants.
-- **Testing:** one test file for the whole app, and it tests a component that never runs in
-  production (`src/services/approval.ts` has no production caller).
+  user, exposing `full_name`, `email`, `phone`, `department` across tenants. **Unaddressed —
+  no PR. This is now the sharpest unclaimed risk in the repo (#13).**
+- **Testing:** two test files. `matchEngine` is now well covered (23 cases, verified to fail
+  against the pre-fix code); the approval path and the entire SQL layer still have zero coverage.
 
 ---
 
@@ -132,8 +137,14 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ### P0 — Critical bugs (ship-blockers; silent data corruption)
 
-**1. `m.id.toLowerCase().includes(lowerName)` matches arbitrary OCR fragments as a 1.0-confidence exact match**
-- `src/matching/matchEngine.ts:34` (and the identical copy being deleted at HEAD's old lines 59-73)
+**0. `main` does not compile — duplicate `const exactMatch` — ✅ FIXED (branch `fix/anchor-id-exact-match`)**
+- `src/matching/matchEngine.ts:31` and `:60` on `main`
+- **Verified by execution.** Introduced by `5f52560`. All 5 open PRs are affected.
+- **Fix applied:** collapsed the two blocks into one step-0 block and deleted the duplicate.
+- See the banner at the top of this document.
+
+**1. `m.id.toLowerCase().includes(lowerName)` matches arbitrary OCR fragments as a 1.0-confidence exact match — ✅ FIXED (branch `fix/anchor-id-exact-match`)**
+- `src/matching/matchEngine.ts:34` on `main`
 - **Verified by execution.** `member.id` is a UUID (`schema.sql:3`). A one- or two-character
   OCR artifact — `"a"`, `"d"`, `"0"`, `"-"` — is a *substring* of nearly every UUID, so
   `members.find` returns the first roster member whose UUID contains it, at
@@ -141,10 +152,30 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   a noisy table cell produces.
 - **Impact:** flows into `suggested_table` → `approve_session` → a wrong-person `attendance`
   row, displayed to the operator as maximally confident.
-- **Fix:** anchor the ID check. Matching a substring against a UUID has no correct form.
-  If ID matching is genuinely wanted it needs a *separate* numeric field on `members` matched
-  with `^`/`$`. Interim: gate behind `lowerName.length >= 6 && /^\d+$/.test(lowerName)`, or
-  delete the clause. Add the regression tests from #20.
+- **Fix applied:** the id check is now **anchored** — `m.id.toLowerCase() === lowerName`,
+  guarded by `MIN_ID_MATCH_LENGTH = 6`. Whole-id equality is the only correct form of id
+  matching (a substring test against a UUID has none) and is also *total*: at most one member
+  can own a given id, so `members.find` cannot return an arbitrary earlier member.
+  Name and alias matching are unchanged — those are genuine whole-string comparisons.
+- **Behaviour change to be aware of:** an OCR cell that used to become a bogus `exact` match
+  now resolves through the fuzzy path or falls through to `status: 'none'`. A 1–2 character
+  fragment that genuinely fuzzy-matches a name/alias is still returned, but at `fuzzy`
+  confidence, not `1.0/exact`. This is the intended outcome.
+- **Files:** `src/matching/matchEngine.ts`, `src/matching/matchEngine.test.ts`
+- **Tests added:** 23 cases in `matchEngine.test.ts`. **Verified by execution that 13 of them
+  FAIL against the pre-fix code and all 24 pass after** — they are genuine regression tests,
+  not tautologies.
+
+**1b. Real id matching is not actually implemented — 🆕 OPEN (P1)**
+- Matching a member by a *human-entered* id/number is a plausible intent of the original
+  clause, but `members` has **no numeric column** (`schema.sql:4-8` = `id, full_name,
+  email, phone, department, created_at`). `id` is an internal UUID that a human would never
+  read off a register, so the feature the clause was trying to serve **cannot work** as
+  written — the correct conclusion is that whole-UUID matching (what fix #1 now does) is the
+  right behaviour, and no separate numeric field is needed.
+- If id-number matching is genuinely wanted later, it needs a **new** column on `members`
+  (e.g. `reg_no TEXT UNIQUE`) matched with `^`/`$`. That is a schema migration (#27), not a
+  bug fix.
 
 **2. Two incompatible auth strategies — `middleware.ts` vs `src/lib/supabase.ts`**
 - `middleware.ts:6-17`, `src/lib/supabase.ts:12`, `src/app/login/page.tsx:26-36`
@@ -181,22 +212,33 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** extend the SQL `WHERE` to exclude `status = 'flagged'`; require `status='approved'`
   or add an explicit "approve all unflagged" confirm step. Add a `minConfidence` constant to
   `matchEngine.ts` and return `status:'none'` below it.
-- **STATUS 2026-10-02 — PARTIALLY CLOSED (UI half done here; SQL half is PR #2).**
-  The SQL `WHERE` fix (skip `status = 'flagged'`, require a real member object) is already
-  written in **PR #2** (`fix/approve-session-null-member-rows`) — do not duplicate it.
-  **Closed on `fix/finalize-review-gate`:** the *review-gate* half. The finalize button was
-  gated on nothing while `approvedCount`/`progressPct` were computed, displayed, and never
-  enforced — a purely decorative progress bar. `src/services/approval.ts` gained
-  `reviewProgress()` / `canFinalize()`, and `sessions/[id]/page.tsx` now disables
-  "Finalize & Approve" (with an explanatory tooltip) until every *eligible* row — one that
-  carries a member and is not a header, i.e. a row the SQL could actually write — is
-  explicitly approved or flagged, plus a re-check inside `saveState` as defence in depth.
-  Memberless `status:'none'` rows are excluded from the gate so a bad OCR match cannot
-  deadlock the operator, and the displayed counter now reads decided/eligible instead of
-  approved/all-rows.
-  **Still open:** the `minConfidence` floor in `matchEngine.ts` (a sub-threshold fuzzy match
-  still presents as a decision-able row), and SQL-level tests for the row-selection contract
-  (#28).
+- **STATUS 2026-10-03 — fuzzy half CLOSED on `fix/fuzzy-confidence-floor`; the UI half and
+  the SQL half are separate open PRs.**
+  **The prescribed `minConfidence` floor is NOT implementable as written, and this was
+  verified by execution, not assumed.** Measuring a 4-member roster with the shipped
+  `threshold: 0.35`:
+  - 13 of 22 junk fragments (`"a"`, `"Ad"`, `"gh"`, `"Ma"`, `"Lo"`, `"Ok"`, …) resolved to a
+    real person at `status:'fuzzy'`, **at confidence 0.9672–0.9959** — and this was *after*
+    PR #6 anchored the exact-id path. The fuzzy path was left completely open.
+  - Genuinely misread **real** names scored **0.588–0.760** (`"Ada Lovclacc"` 0.588,
+    `"Grace Hoppr"` 0.695, `"Chinelo Okonkw"` 0.967 as a truncation).
+  - So the two populations **overlap**: at floor 0.7 all 13 junk entries survive and 11/15
+    real matches survive; at 0.95 all 13 junk entries still survive. Fuse scores
+    edit-distance *ratios*, and a short query against a long name scores near-optimistically.
+  - **Length separates them perfectly**: junk ≤2 chars, every legitimate match ≥4.
+  - **What shipped instead:** `MIN_FUZZY_MATCH_LENGTH = 3` gates the *fuzzy* path only
+    (`matchEngine.ts`). Short text returns `status:'none'` — no suggestion — leaving the row
+    for the operator instead of pre-filling the wrong person. At 3, all 13 junk fragments
+    are rejected and all 13 legitimate short names still resolve; 5 would reject real short
+    names without rejecting any extra junk.
+  - Exact name/alias matches and learned corrections are deliberately **untouched** — both
+    are authoritative decisions, not fuzzy guesses.
+  - **Still open:** the SQL `WHERE` half (exclude `status='flagged'`) — PR #2; the
+    finalize-button review gate — PR #7; and SQL-level tests for the row-selection
+    contract (#28).
+  - **Newly discovered (2026-10-03):** a confidence floor is the wrong instrument *for any*
+    fuzzy matcher here, because confidence and correctness are anti-correlated at short
+    lengths. Any future attempt to add one should be rejected with this measurement in hand.
 
 **5. `region` / `explanation` / `semanticConfidence` are dropped before persistence, silently killing four features**
 - Producer `src/app/attendance/new/page.tsx:67-76`; consumers at
@@ -263,13 +305,15 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** once #3 and #4 are fixed, move the row-selection contract entirely into the SQL
   function (it is the enforcement point) and test it there — or delete `approval.ts` and its test.
 
-**12. No regression test for the exact-over-correction precedence that commit `5f52560` introduced**
+**12. No regression test for the exact-over-correction precedence that commit `5f52560` introduced — ✅ FIXED (branch `fix/anchor-id-exact-match`)**
 - `src/matching/matchEngine.test.ts:7-11`
 - The test named *"prefers learned corrections"* now describes the **opposite** of the
-  implemented contract, and passes only because `"Adaa"` has no exact match. The behaviour the
-  most recent feature commit exists to guarantee is untested.
-- **Fix:** add a case where a string **both** exactly matches a member **and** has a learned
-  correction, asserting `status === 'exact'`. Rename the existing case to what it actually pins.
+  implemented contract, and passes only because `"Adaa"` has no exact match.
+- **Fix applied:** added a case where `"Ada"` **both** exactly matches `ada`'s alias **and** has
+  a learned correction pointing at `grace`, asserting `status === 'exact'` and
+  `suggestedMember.id === ada.id`. The original case was renamed to *"falls back to a learned
+  correction when there is no exact match"*, which is what it actually pinned.
+- Verified: both cases pass, and the precedence case fails if step 0 is reordered below step 1.
 
 **13. `members` and `corrections` are readable and writable by every authenticated user (PII exposure)**
 - `database/schema.sql:109-110` — `USING (true) WITH CHECK (true)` on `members`
@@ -363,6 +407,18 @@ stops the §10 drift from recurring.
 `DROP POLICY IF EXISTS` gives no version tracking, no rollback, and no way to know what is
 deployed. Adopt `supabase/migrations/` with numbered timestamped files.
 
+**39. `docs/MAINTENANCE.md` has forked across six branches and does not exist on `main`**
+- New item, 2026-10-03. The document that every automated run treats as its source of truth
+  lives only on `chore/maintenance-doc` (PR #1, unmerged), and five other PR branches each
+  carry a **different revision of it**. Two 2026-10-02 runs therefore recorded *contradictory*
+  states for P0 #4 — one claiming the review gate was already closed, the other still listing
+  it as open — because each was reading its own branch's copy.
+- **Impact:** a future run can silently trust a stale or contradicted analysis. This run
+  stacked on `fix/anchor-id-exact-match` and had to reconcile two revisions by hand.
+- **Fix:** merge PR #1 first, then rebase the open branches onto it and rebase each later
+  run's doc edit on the merged copy. Until then, treat the document as advisory and
+  re-verify every item against the actual code — which is the right practice anyway (§2).
+
 **28. Test the SQL layer** — add a Supabase local test (`supabase test db`) covering
 `approve_session` and `upsert_correction`. The row-selection contract is the enforcement
 point for #3 and #4 and currently has zero coverage.
@@ -408,18 +464,20 @@ projection thresholds, `max = 1600`. Each silently changes OCR quality; none is 
 
 ## 4. Testing
 
-- **One test file** for the entire application: `src/matching/matchEngine.test.ts` (vitest).
-- It covers the one module that is pure logic and easy to break — a good instinct — but the
-  surface it guards is small next to what is untested.
-- **Untested:** the entire OCR pipeline (`ocrService`, `tableSegmenter`, `computerVision`,
+- **Two test files.** `src/matching/matchEngine.test.ts` (23 cases) and
+  `src/services/approval.test.ts` (1 case).
+- `matchEngine` is now genuinely covered — it is the one module that is pure logic, and the
+  test suite was **verified by execution to fail 13/24 against the pre-fix code**, so the
+  cases are load-bearing rather than decorative.
+- **Still untested:** the entire OCR pipeline (`ocrService`, `tableSegmenter`, `computerVision`,
   `dataCorrector`, `semanticAnalyzer`), all Supabase access, all routes and components, and —
-  critically — `database/schema.sql`, which is the actual enforcement point for attendance
-  writes.
-- **The one tested approval component never runs in production** (#11), so the approval path has
+  critically — `database/schema.sql`, which is the actual enforcement point for attendance writes.
+- **The one other tested component never runs in production** (#11), so the approval path has
   effectively **zero** coverage of the code that matters.
-- **Highest-value new tests:** (a) the UUID-substring regression (#1), (b) the
-  exact-over-correction precedence (#12), (c) the `serial` header misclassification (#9), and
-  (d) SQL tests for `approve_session` (#28).
+- **Highest-value next tests:** (a) SQL tests for `approve_session` (#28) — this is the
+  enforcement point for bugs #3 and #4 and has no coverage at all, (b) the `serial` header
+  misclassification (#9), (c) the inverted `validateRow` correction condition (#7), both of
+  which are data-destroying and currently unverified by execution.
 
 ---
 
@@ -436,34 +494,60 @@ offline/privacy claim that fails because no `.traineddata` is committed (§1.5).
 | Date | Branch | Task | PR | Result |
 |---|---|---|---|---|
 | 2026-09-26 | `chore/maintenance-doc` | Initial review + this document | — | Baseline established, 0 of 38 items closed |
-| 2026-09-27 | `fix/approve-session-null-member-rows` | P0 #3 — NULL-member attendance rows | #2 | PR opened, unmerged |
-| 2026-09-28 | `fix/supabase-cookie-session-matches-middleware` | P0 #2 — cookie/localStorage auth split | #3 | PR opened, unmerged |
-| 2026-09-29 | `fix/persist-ocr-semantic-fields` | P0 #5 — dropped semantic fields | #4 | PR opened, unmerged |
-| 2026-09-30 | `fix/upload-validation-shows-error` | P0 #6 — upload validation throws | #5 | PR opened, unmerged |
-| 2026-10-01 | `fix/anchor-id-exact-match` | P0 #1/#12 — UUID substring exact match | #6 | PR opened, unmerged |
-| 2026-10-02 | `fix/finalize-review-gate` | P0 #4 (UI half) — finalize had no review gate | #7 | PR opened, unmerged; 10/10 tests, lint 0 errors, tsc clean |
+| 2026-10-01 | `fix/anchor-id-exact-match` | **#0** `main` does not compile (duplicate `const exactMatch` from `5f52560`) + **#1** UUID-substring match reported as `exact` @ 1.0 confidence + **#12** exact-over-correction regression test | this run | 24/24 tests, `tsc` 0 errors, lint 0 errors. **13 of the new tests verified to FAIL against the pre-fix code.** Precedence test verified to fail if step 0 is reordered. |
+| 2026-10-03 | `fix/fuzzy-confidence-floor` | **#4 (fuzzy half)** — 1–2 char OCR fragments resolved to real people at 0.967–0.996 confidence via the fuzzy path, which PR #6 left open | this run | 52/52 tests, lint 0 errors (4 pre-existing warnings), `tsc` clean. **14 of the new tests verified to FAIL against the pre-fix code.** The `minConfidence` floor prescribed by the backlog was rejected as unimplementable — see #4. |
 
-**Remaining backlog:** 1 × P0 (fully open, #4's `minConfidence` floor), 19 × P1, 5 × P2, 8 × P3.
+**Remaining backlog:** 5 × P0 (#2–#5 + #1b reclassified to P1), 19 × P1, 5 × P2, 8 × P3.
+**Closed so far:** #0, #1, #12 (3 of 41) + the fuzzy half of #4. **All four remaining P0 bugs
+already have open PRs** — do not start them again; check for a merge first.
 
-> **Merge-order note (2026-10-02).** Six PRs are open and **none have been merged**. The
-> highest-value P0 items (#1, #2, #3, #5, #6) exist only in those branches, so `main` is
-> still missing them. Review them oldest-first: #2 (attendance integrity) → #6 (blocks
-> builds for every other branch) → #3 → #4 → #5 → #1 → this PR.
+> **Stale-analysis note (2026-10-03).** `docs/MAINTENANCE.md` does **not** exist on `main` —
+> it lives only on the unmerged `chore/maintenance-doc` branch (PR #1). Worse, the doc has
+> **forked**: `fix/anchor-id-exact-match`, `fix/approve-session-null-member-rows`,
+> `fix/supabase-cookie-session-matches-middleware`, `fix/persist-ocr-semantic-fields` and
+> `fix/upload-validation-shows-error` all edit their own copy, and `fix/finalize-review-gate`
+> carries yet another revision. This run stacked on `fix/anchor-id-exact-match`, so its
+> baseline text is that branch's copy. **Until PR #1 and one canonical doc land, every run must
+> expect to hand-merge doc conflicts.** This is now a blocker worth its own item (#39, P2).
+
+### Recommended order for the next runs
+
+1. **#13 — `members`/`corrections` RLS is `USING (true)` across tenants.** The only P0-class
+   item with **no PR against it**, and a live PII exposure (`full_name`, `email`, `phone`,
+   `department` readable and writable by any signed-up user). Highest risk × zero coverage.
+   *Unchanged — still the top recommendation.*
+2. **#2 — the cookie/`localStorage` auth split** (PR #3 is open but unmerged). With the app
+   expected to be unusable wherever the middleware runs, no other fix is testable end-to-end
+   until this merges. Consider flagging to the user as the merge priority.
+3. **#4's SQL half** — PR #2 must land for the `status='flagged'` exclusion to exist at all.
+4. **#7 — the inverted `validateRow` condition.** Data-destroying and *unverified by execution*.
+5. **#9 — unanchored `/no\.?/` classifies `Notes`/`Nomination` as `serial`.** Data-destroying,
+   also unverified by execution (the original review claimed verification; re-verify before fixing).
+6. **#28 — SQL tests for `approve_session`.** The real enforcement point for #3/#4 has zero coverage.
+
+> **Do not attempt P0 #4's `minConfidence` floor again.** It is now measured to be the wrong
+> instrument; see the 2026-10-03 STATUS note under item #4 for the numbers.
+
+**Note on every branch from here:** work in a `git worktree`, not the main checkout. The main
+checkout carries an uncommitted `src/matching/matchEngine.ts` edit (§7) that automated runs must
+not stage. On Windows a `node_modules` **junction** between worktrees corrupts the shared
+directory (symlink deletion follows the link) — use a real `npm ci` per worktree.
 
 ---
 
 ## 7. Note on the uncommitted working-tree change
 
-At review time the working tree carried one uncommitted modification to
-`src/matching/matchEngine.ts` (16 lines removed, 1 added).
+**RESOLVED 2026-10-01.** The main checkout still carries the same uncommitted modification to
+`src/matching/matchEngine.ts` (16 lines removed, 1 added) — it was left untouched on purpose.
+That change is **the de-duplication half of PR `fix/anchor-id-exact-match`**: commit `5f52560`
+added an identical step-0 exact-match block at lines 30-43 which runs before the correction
+lookup, making the deleted block (old lines 59-73) unreachable dead code — and, more seriously,
+**that duplication is why `main` no longer compiles.**
 
-**This is a safe de-duplication, not a regression.** Commit `5f52560` ("prioritize exact matches
-over corrections") already introduced an identical step-0 exact-match block at lines 30-43, which
-runs *before* the correction lookup — making the deleted block (old lines 59-73) unreachable dead
-code. The genuine defect is `m.id.toLowerCase().includes(lowerName)` at line 34, which survives
-in the retained block and is backlog item **#1**.
+So the working-tree edit is no longer a mystery and no longer a decision for the user: once PR
+`fix/anchor-id-exact-match` merges, that checkout can simply be reset (`git checkout --
+src/matching/matchEngine.ts`) because the merged branch contains the same change.
 
-**Still requires a decision:** whether to commit this de-duplication or discard it. It is
-untracked work sitting in the working tree, and the daily cron job runs against this same
-checkout — so it must be resolved before automated runs begin, or the job will operate on a
-dirty tree.
+**Still unresolved:** the substantive defect in the retained block,
+`m.id.toLowerCase().includes(lowerName)`, was **backlog item #1** and is fixed on the same
+branch (now anchored to whole-id equality).
