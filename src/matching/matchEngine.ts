@@ -12,6 +12,32 @@ import { Member, MatchResult, Correction } from '../types';
  */
 const MIN_ID_MATCH_LENGTH = 6;
 
+/**
+ * Minimum length before text may be offered as a *fuzzy* suggestion.
+ *
+ * Fuse.js scores are edit-distance ratios, so a SHORT query is scored against a
+ * LONG name almost optimistically: with `threshold: 0.35`, a one- or two-character
+ * OCR artifact matched a roster member at confidence 0.967-0.996 — higher than
+ * genuinely-misread real names such as "Grace Hoppr" (0.695) or "Ada Lovclacc"
+ * (0.588). Measured against a 4-member roster, 13 of 22 junk fragments
+ * ("a", "Ad", "gh", "Ma", "Lo", ...) resolved to a person at `fuzzy`, while
+ * every legitimate match was at least 4 characters.
+ *
+ * A `minConfidence` floor therefore CANNOT fix this: the two populations overlap
+ * heavily (junk 0.967-0.996 vs. legit 0.588-0.760), so any floor low enough to
+ * keep real matches keeps all the junk, and any floor high enough to drop the
+ * junk discards a third of the real ones. Length is the axis that actually
+ * separates them, so it is the axis that is gated.
+ *
+ * At this value all 13 junk fragments are rejected while all 13 legitimate
+ * short names ("Adaa", "Grah", "Hoppr", "Ada L") still resolve. Raising it to 5
+ * would start rejecting real short names without rejecting any additional junk.
+ *
+ * Rejecting yields `status: 'none'` — no suggestion — so the row is left for the
+ * operator rather than being pre-filled with the wrong person.
+ */
+const MIN_FUZZY_MATCH_LENGTH = 3;
+
 export function matchMembers(
   ocrNames: string[],
   members: Member[],
@@ -80,7 +106,14 @@ export function matchMembers(
     }
 
     // 2. Fuzzy match
-    const results = fuse.search(ocrName);
+    //
+    // Gated on length, not on confidence: a short OCR artifact scores HIGHER
+    // against a long name than a genuinely misread real name does, so a
+    // confidence floor would reject the real matches and keep the junk. See
+    // MIN_FUZZY_MATCH_LENGTH.
+    const results = lowerName.length >= MIN_FUZZY_MATCH_LENGTH
+      ? fuse.search(ocrName)
+      : [];
     if (results.length > 0) {
       const bestMatch = results[0];
       return {
