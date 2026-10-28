@@ -30,12 +30,38 @@ jobs:
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.pull_requests[0] != null
     steps:
+      # The key is stored as ONE base64 line (secret REVIEWER_APP_KEY_B64) because
+      # pasting a multi-line PEM into the secret box can alter it, which made the
+      # token step fail with "DECODER routines::unsupported".
+      - name: Decode and check private key
+        id: key
+        env:
+          KEY_B64: ${{ secrets.REVIEWER_APP_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEY_B64" ]; then
+            echo "::error::Secret REVIEWER_APP_KEY_B64 is empty or missing."; exit 1
+          fi
+          pem=$(printf '%s' "$KEY_B64" | tr -d '[:space:]' | base64 -d | tr -d '\r')
+          # Mask every line of the decoded key so it can never appear in logs.
+          while IFS= read -r line; do
+            case "$line" in -----*) ;; *) [ -n "$line" ] && echo "::add-mask::$line" ;; esac
+          done <<<"$pem"
+          # Fail with a clear message if the key is not a valid RSA key.
+          printf '%s\n' "$pem" | openssl rsa -check -noout >/dev/null 2>&1 \
+            || { echo "::error::Decoded REVIEWER_APP_KEY_B64 is not a valid RSA private key."; exit 1; }
+          {
+            echo "pem<<KEY_EOF"
+            printf '%s\n' "$pem"
+            echo "KEY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create reviewer app token
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ vars.REVIEWER_APP_ID }}
-          private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
+          private-key: ${{ steps.key.outputs.pem }}
           permission-contents: read
           permission-pull-requests: write
 
