@@ -27,11 +27,34 @@ vi.mock('@/lib/semanticAnalyzer', () => ({
   }),
 }));
 
-vi.mock('@/lib/dataCorrector', () => ({
-  validateRow: vi.fn(),
-  correctCellText: vi.fn(),
-  validateDocument: vi.fn(),
-}));
+vi.mock('@/lib/dataCorrector', () => {
+  const validateRow = vi.fn();
+  return {
+    validateRow,
+    correctCellText: vi.fn(),
+    validateDocument: vi.fn(),
+    // performOCR calls finalizeRowColumns (backlog #7), which in the real module
+    // delegates to validateRow. A module-internal call can't be intercepted by
+    // mocking validateRow alone, so this stand-in mirrors that delegation and
+    // keeps the test's validateRow mock in the loop.
+    finalizeRowColumns: vi.fn(
+      (
+        rawColumns: string[],
+        expectedCols: number,
+        colTypes: string[] | undefined,
+        avgConfidence: number,
+        healedColumns: string[] | null = null,
+      ) => {
+        const validation = validateRow(healedColumns ?? rawColumns, expectedCols, colTypes);
+        return {
+          columns: validation.correctedColumns,
+          issues: validation.issues,
+          needsFallback: healedColumns === null && (!validation.isValid || avgConfidence < 75),
+        };
+      },
+    ),
+  };
+});
 
 vi.mock('tesseract.js', () => ({
   createWorker: vi.fn(() => ({
