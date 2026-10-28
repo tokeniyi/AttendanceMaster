@@ -551,3 +551,7 @@ src/matching/matchEngine.ts`) because the merged branch contains the same change
 **Still unresolved:** the substantive defect in the retained block,
 `m.id.toLowerCase().includes(lowerName)`, was **backlog item #1** and is fixed on the same
 branch (now anchored to whole-id equality).
+
+## Automated review
+
+Small pull requests (up to 15 files / 400 changed lines) that pass the Test workflow and do not touch CI, auth, database, dependency or env files are approved automatically by the `attendancemaster-reviewer` GitHub App (`.github/workflows/auto-review.yml`). Everything else needs a human review.
