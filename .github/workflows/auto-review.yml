@@ -1,0 +1,89 @@
+name: Auto review
+
+# Approves small, low-risk pull requests once the "Test" workflow has passed.
+#
+# Security design:
+#   * Triggered by `workflow_run`, so GitHub runs THIS file as it exists on the
+#     default branch. A pull request cannot edit it to read the app's private key.
+#   * It never checks out or runs pull request code. It only reads the list of
+#     changed files through the API.
+#   * Anything touching sensitive paths, or anything large, is left for a human.
+
+on:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: auto-review-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review small PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0] != null
+    steps:
+      - name: Create reviewer app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.REVIEWER_APP_ID }}
+          private-key: ${{ secrets.REVIEWER_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-pull-requests: write
+
+      - name: Decide and approve
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          # Limits for "small". Larger PRs are left for a human.
+          MAX_FILES: "15"
+          MAX_CHANGED_LINES: "400"
+          # Paths that always need a human: CI, auth, database, dependencies, secrets.
+          SENSITIVE_REGEX: '^(\.github/|middleware\.ts$|database/|package\.json$|package-lock\.json$|next\.config\.|\.env|src/lib/supabase)'
+        run: |
+          set -euo pipefail
+
+          summary() { echo "$1" | tee -a "$GITHUB_STEP_SUMMARY"; }
+
+          pr=$(gh api "repos/$REPO/pulls/$PR_NUMBER")
+          state=$(jq -r '.state' <<<"$pr")
+          draft=$(jq -r '.draft' <<<"$pr")
+          head_sha=$(jq -r '.head.sha' <<<"$pr")
+
+          if [ "$state" != "open" ] || [ "$draft" = "true" ]; then
+            summary "Skipped: PR #$PR_NUMBER is closed or a draft."; exit 0
+          fi
+          if [ "$head_sha" != "$TESTED_SHA" ]; then
+            summary "Skipped: PR head moved since the tested commit. Tests will re-run."; exit 0
+          fi
+
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" \
+            --jq '.[] | [.filename, (.additions + .deletions)] | @tsv')
+          file_count=$(wc -l <<<"$files" | tr -d ' ')
+          changed=$(awk -F'\t' '{s+=$2} END {print s+0}' <<<"$files")
+
+          if [ "$file_count" -gt "$MAX_FILES" ] || [ "$changed" -gt "$MAX_CHANGED_LINES" ]; then
+            summary "Left for human review: PR is large ($file_count files, $changed changed lines)."; exit 0
+          fi
+
+          sensitive=$(cut -f1 <<<"$files" | grep -E "$SENSITIVE_REGEX" || true)
+          if [ -n "$sensitive" ]; then
+            summary "Left for human review: touches sensitive paths:"
+            summary "$sensitive"; exit 0
+          fi
+
+          gh api -X POST "repos/$REPO/pulls/$PR_NUMBER/reviews" \
+            -f event=APPROVE \
+            -f commit_id="$TESTED_SHA" \
+            -f body="Automated review: tests passed, $file_count files / $changed changed lines, no sensitive paths touched."
+          summary "Approved PR #$PR_NUMBER at $TESTED_SHA."
