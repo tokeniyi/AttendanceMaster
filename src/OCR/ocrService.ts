@@ -265,8 +265,10 @@ async function runWordCluster(
   // Try both normal and inverted then use best result
   await worker.setParameters({ tessedit_pageseg_mode: '6' as any });
 
-  const { data } = await worker.recognize(image as any);
-  await worker.terminate();
+  // Always release the worker (and its WASM memory), even if recognition throws.
+  const { data } = await worker
+    .recognize(image as any)
+    .finally(() => worker.terminate());
 
   onProgress?.('Clustering words into rows and columns…', 85);
 
