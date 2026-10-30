@@ -74,6 +74,10 @@ export async function performOCR(
   const numWorkers = Math.max(1, Math.min(4, hardwareConcurrency - 1));
 
   const scheduler = createScheduler();
+  let fallbackWorker: Worker | undefined;
+  // Worker creation lives inside the try so a failure creating the Nth worker
+  // still terminates the ones already created (see finally).
+  try {
   for (let i = 0; i < numWorkers; i++) {
     const w = await createWorker('eng', 1, { workerPath: '/tesseract/worker.min.js', corePath: '/tesseract/tesseract-core.wasm.js', workerBlobURL: false });
     await w.setParameters({ tessedit_pageseg_mode: '7' as any, tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,/-()% ', preserve_interword_spaces: '0' as any });
@@ -81,9 +85,10 @@ export async function performOCR(
   }
 
   // Persistent fallback worker for structurally anomalous cells
-  const fallbackWorker = await createWorker('eng', 1, { workerPath: '/tesseract/worker.min.js', corePath: '/tesseract/tesseract-core.wasm.js', workerBlobURL: false });
-  await fallbackWorker.setParameters({ tessedit_pageseg_mode: '8' as any, tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,/-()% ', preserve_interword_spaces: '0' as any });
-  try {
+  const fallbackWorker_ = await createWorker('eng', 1, { workerPath: '/tesseract/worker.min.js', corePath: '/tesseract/tesseract-core.wasm.js', workerBlobURL: false });
+  fallbackWorker = fallbackWorker_;
+  await fallbackWorker_.setParameters({ tessedit_pageseg_mode: '8' as any, tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,/-()% ', preserve_interword_spaces: '0' as any });
+  const fb = fallbackWorker_;
 
   const numRows = grid.rowBoundaries.length - 1;
   const numCols = grid.colBoundaries.length - 1;
@@ -200,7 +205,7 @@ export async function performOCR(
           if (cell) {
              const { dataUrl } = extractCellImage(sourceCanvas, cell, grid.isInverted);
              try {
-               const { data } = await fallbackWorker.recognize(dataUrl);
+               const { data } = await fb.recognize(dataUrl);
                if (data.confidence > cellConfs[r][c]) {
                  healedCols[c] = data.text.trim().replace(/\n/g, ' ');
                  cellConfs[r][c] = data.confidence;
@@ -239,7 +244,7 @@ export async function performOCR(
   const semantic = analyseDocument(results);
   return semantic.rows.filter(r => r.region !== 'empty');
   } finally {
-    await Promise.allSettled([scheduler.terminate(), fallbackWorker.terminate()]);
+    await Promise.allSettled([scheduler.terminate(), fallbackWorker?.terminate()]);
   }
 }
 
