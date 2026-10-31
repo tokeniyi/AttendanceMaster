@@ -22,6 +22,15 @@ export default function NewAttendancePage() {
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Object URL backing the preview. It must outlive processFile (the preview is
+  // still displayed after an error), so it is revoked on replacement/unmount only.
+  const previewUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -63,11 +72,12 @@ export default function NewAttendancePage() {
     setIsProcessing(true);
     setProgressPct(0);
     setProgressMsg("Reading document…");
-    let objectUrl: string | undefined;
 
     try {
       // 0. Use object URL for instant preview (zero lag)
-      objectUrl = URL.createObjectURL(file);
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      const objectUrl = URL.createObjectURL(file);
+      previewUrlRef.current = objectUrl;
       setImage(objectUrl);
 
       // 1. Run OCR with live progress
@@ -154,8 +164,6 @@ export default function NewAttendancePage() {
       console.error("Processing error:", err);
       alert(`Error: ${err.message || "Something went wrong during processing."}`);
       setIsProcessing(false);
-    } finally {
-      if (typeof objectUrl !== "undefined") URL.revokeObjectURL(objectUrl);
     }
   };
 

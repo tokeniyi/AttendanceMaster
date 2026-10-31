@@ -197,13 +197,21 @@ export async function renderToCanvas(
 function loadImage(source: string | File | Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    if (source instanceof File || source instanceof Blob) {
-      img.src = URL.createObjectURL(source);
-    } else {
-      img.src = source;
-    }
+    const objectUrl =
+      source instanceof File || source instanceof Blob ? URL.createObjectURL(source) : null;
+    // Once decoded, the bitmap lives in the element; the blob URL is no longer needed.
+    const release = () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+    img.onload = () => {
+      release();
+      resolve(img);
+    };
+    img.onerror = (e) => {
+      release();
+      reject(e);
+    };
+    img.src = objectUrl ?? (source as string);
   });
 }
 

@@ -46,7 +46,7 @@ src/lib/tableSegmenter.ts     projection-profile table grid detection
 src/lib/computerVision.ts     binarize / dilate / erode / connectedComponents
 src/lib/semanticAnalyzer.ts   row region + column type classification
 src/lib/dataCorrector.ts      per-cell text normalization + row validation
-src/lib/imageProcessor.ts     contrast/brightness/sharpen — DEAD
+src/lib/imageProcessor.ts     (deleted, #36)
 src/lib/uploadValidation.ts   MIME + 10 MB cap
 src/OCR/ocrService.ts         tesseract.js orchestration (4-phase)
 src/matching/matchEngine.ts   Fuse.js name matching
@@ -354,14 +354,14 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   `worker.recognize` orphans a worker and its WASM memory for the tab's lifetime.
 - **Fix:** wrap `:267-270` in `try { … } finally { await worker.terminate(); }`.
 
-**18. Object URLs are never revoked in `loadImage`**
+**18. Object URLs are never revoked in `loadImage`** — ✅ FIXED (2026-10-31, `claude/dev-2026-10-31`)
 - `src/lib/tableSegmenter.ts:197-208`, `src/lib/imageProcessor.ts:80-91`
 - `URL.createObjectURL` with no revoke, and `img.onload = () => resolve(img)` leaves no handle.
   `performOCR` calls it at least twice per run. With the 10 MB cap, repeated or failed uploads
   pin tens of MB.
 - **Fix:** revoke in an `onload`/`onerror` continuation after `drawImage` has consumed it.
 
-**19. Object URL revoked while still displayed**
+**19. Object URL revoked while still displayed** — ✅ FIXED (2026-10-31, `claude/dev-2026-10-31`)
 - `src/app/attendance/new/page.tsx:42-43` sets `image` to the object URL; `:137` revokes it in
   `finally`. The preview `<img src={image}>` at `:227` then renders a broken image for the rest
   of the page's life, including the "Image loaded" branch at `:231-235` shown after an error.
@@ -452,7 +452,7 @@ row trash/edit (`:111-116`), "Filter" (`attendance/history/page.tsx:106-108`), "
 `alert()` / `window.print()` stubs. The workspace's clipboard-TSV export (`:208-218`) is the real
 feature.
 
-**36. Delete the dead `src/lib/imageProcessor.ts`** — unused; superseded by `computerVision.ts`.
+**36. Delete the dead `src/lib/imageProcessor.ts`** — ✅ DONE (file removed) — unused; superseded by `computerVision.ts`.
 
 **37. Consolidate the magic numbers behind documented config** — `threshold: 0.35`, `Y_TOL = 14`,
 `MAX_DIM = 1000`, the `140` binarize threshold, the `70`/`75` confidence gates, `0.005`/`0.015`
