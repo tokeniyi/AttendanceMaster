@@ -7,13 +7,22 @@
 - Grid-path worker leak: scheduler/fallback worker creation moved inside the `try` in `performOCR`, so `finally` terminates already-created workers (2026-10-30).
 - Backlog #36: deleted dead `src/lib/imageProcessor.ts` (no importers; grep-verified) (2026-10-30).
 
+- Backlog #18: `tableSegmenter.loadImage` revokes its blob URL on load/error (2026-10-31).
+- Backlog #19: preview object URL in `attendance/new/page.tsx` now tracked in a ref and revoked on replacement/unmount, not in `finally` (2026-10-31).
+
 ## Outstanding
-- Verify the fixes with `npm test` / `npm run build` (npm crashed in the cloud run; rely on the Test workflow).
-- MAINTENANCE.md status refresh: several backlog items are already merged on main.
-- Next small candidates: #18 (revoke object URLs in `tableSegmenter.loadImage`), #19 (preview URL revoked while displayed), #38 (version strings).
+- MAINTENANCE.md status refresh: only #18/#19/#36 marked so far; other merged items (#12–#16 etc.) still show stale text.
+- Next small candidate: #38 (version strings: package.json 0.1.0 vs Sidebar v1.1.0; owner should pick the canonical version).
+- Local `npm run build` fails offline (next/font cannot fetch Inter from Google Fonts); rely on the Test workflow for build.
 - Large items needing a plan first (docs/plans/): #13 (members/corrections RLS), #2 (auth cookie split).
 
 ## Run log
+
+### 2026-10-31 (Africa/Lagos) — branch claude/dev-2026-10-31
+- Changed: `src/lib/tableSegmenter.ts` (#18), `src/app/attendance/new/page.tsx` (#19), `docs/MAINTENANCE.md` (status), this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR — #22 already merged).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 122/122 passed; `npx tsc --noEmit` clean; `npm run build` FAILED locally only because Google Fonts (Inter) is unreachable in this sandbox — relying on the Test workflow for the build.
+- Found but not changed: #38 version mismatch (needs owner's choice of canonical version); no unit tests added for the DOM-dependent fixes (vitest env is node).
 
 ### 2026-10-30 (Africa/Lagos) — branch claude/dev-2026-10-29 (PR #22, continued)
 - Changed: `src/OCR/ocrService.ts` (grid-path worker leak), removed `src/lib/imageProcessor.ts` (#36), this file.
