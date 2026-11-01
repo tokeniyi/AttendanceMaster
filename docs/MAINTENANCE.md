@@ -392,7 +392,7 @@ message. Same class of problem for every unguarded `supabase.*` call.
 2-core machine and 4 on anything ≥5-core, but each is created sequentially and loads the 3.5 MB
 core before the first cell is recognized. Combined with #16, the first upload is disproportionately slow.
 
-**25. Yield to the event loop between cell extractions** — `ocrService.ts:141, 173`. All N
+**25. Yield to the event loop between cell extractions** — ✅ DONE (2026-11-01, `started` counter in `ocrCell`) — `ocrService.ts:141, 173`. All N
 `extractCellImage` calls (canvas + 3× upscale + `getImageData` + threshold + union-find +
 `toDataURL`) run synchronously in one burst before the first `await`, so the progress UI does
 not paint. Add `if (done % 32 === 0) await new Promise(r => setTimeout(r, 0))`.
