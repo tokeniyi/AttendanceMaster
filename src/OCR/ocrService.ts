@@ -102,8 +102,12 @@ export async function performOCR(
 
   const totalCells = grid.cells.length;
   let done = 0;
+  let started = 0;
 
   const ocrCell = async (cell: CellRegion, semanticType?: string) => {
+    // Yield to the event loop every 32 cells so the synchronous canvas work
+    // in extractCellImage doesn't starve the progress UI (backlog #25).
+    if (started++ % 32 === 31) await new Promise<void>(r => setTimeout(r, 0));
     const { dataUrl, analysis } = extractCellImage(sourceCanvas, cell, grid.isInverted);
     
     // ── Structural Empty Cell Suppression ──
