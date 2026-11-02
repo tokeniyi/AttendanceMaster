@@ -366,13 +366,13 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   `finally`. The preview `<img src={image}>` at `:227` then renders a broken image for the rest
   of the page's life, including the "Image loaded" branch at `:231-235` shown after an error.
 
-**20. `NaN` analytics on an empty table**
+**20. `NaN` analytics on an empty table** — ✅ already fixed (early return at `success/page.tsx:76`; verified 2026-11-02)
 - `src/app/sessions/[id]/success/page.tsx:158, 161` — `0/0` when `finalTable.length === 0`.
   **Verified by execution:** `dataQualityIndex = NaN`, and `width: 'NaN%'` is invalid CSS.
   `final_table` is nullable in practice (e.g. navigating directly to a `pending` session).
 - **Fix:** guard the division and early-return an empty state.
 
-**21. Keyboard handler closes over stale `history`**
+**21. Keyboard handler closes over stale `history`** — ✅ FIXED (2026-11-02, `history` added to effect deps)
 - `src/app/sessions/[id]/page.tsx:113-124` — undo/redo state read from a stale closure.
 
 **22. Inverted (dark-background) images are unsupported but silently produce garbage**
