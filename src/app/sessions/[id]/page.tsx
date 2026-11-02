@@ -123,7 +123,7 @@ export default function SessionWorkspace() {
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [focusedRowIdx, tableData, historyIdx]);
+  }, [focusedRowIdx, tableData, history, historyIdx]);
 
   const pushHistory = (newData: MatchResult[]) => {
     startTransition(() => {

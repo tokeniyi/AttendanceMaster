@@ -11,6 +11,7 @@
 - Backlog #19: preview object URL in `attendance/new/page.tsx` now tracked in a ref and revoked on replacement/unmount, not in `finally` (2026-10-31).
 
 - Backlog #25: `ocrCell` yields to the event loop (`setTimeout 0`) every 32 cells so progress UI can paint (2026-11-01).
+- Backlog #21: keyboard-handler effect in `sessions/[id]/page.tsx` now lists `history` in its deps (2026-11-02). Backlog #7, #9, #20 verified already fixed in code (2026-11-02); MAINTENANCE.md text for #7/#9 still stale.
 
 ## Outstanding
 - MAINTENANCE.md status refresh: only #18/#19/#36 marked so far; other merged items (#12–#16 etc.) still show stale text.
@@ -19,6 +20,12 @@
 - Large items needing a plan first (docs/plans/): #13 (members/corrections RLS), #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-02 (Africa/Lagos) — branch claude/dev-2026-11-02
+- Changed: `src/app/sessions/[id]/page.tsx` (#21 deps), `docs/MAINTENANCE.md` (#20/#21 status), this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR; #24 already merged).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 122/122 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: #7 and #9 appear fixed in code but MAINTENANCE.md still lists them open (status refresh pending); no unit test for #21 (DOM/React, vitest env is node).
 
 ### 2026-11-01 (Africa/Lagos) — branch claude/dev-2026-11-01
 - Changed: `src/OCR/ocrService.ts` (#25), `docs/MAINTENANCE.md` (#25 status), this file.
