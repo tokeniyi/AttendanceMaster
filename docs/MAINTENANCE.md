@@ -399,7 +399,7 @@ not paint. Add `if (done % 32 === 0) await new Promise(r => setTimeout(r, 0))`.
 
 ### P2 — Improvement
 
-**26. Add a `typecheck` script and wire CI** — `package.json:5-11`. `tsc --noEmit` is only
+**26. Add a `typecheck` script and wire CI** — ✅ script added (`npm run typecheck`, 2026-11-03); CI wiring left to the owner (.github is off-limits to automation) — `package.json:5-11`. `tsc --noEmit` is only
 reachable via `next build`; nothing runs `lint`, `typecheck`, or `test` in CI. This is what
 stops the §10 drift from recurring.
 
@@ -426,7 +426,7 @@ point for #3 and #4 and currently has zero coverage.
 **29. Narrow the roster selects** — the members fetches repeat three times across the app and
 include never-rendered PII columns.
 
-**30. Memoise the success-page analytics** — `success/page.tsx:158-189` performs 7 inline
+**30. Memoise the success-page analytics** — ✅ DONE (2026-11-03, single-pass `useMemo`) — `success/page.tsx:158-189` performs 7 inline
 `filter` traversals per render; extract to a single `useMemo`.
 
 ### P3 — Nice-to-have

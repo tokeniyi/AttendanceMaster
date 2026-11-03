@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { 
   CheckCircle2, 
@@ -69,9 +69,22 @@ export default function SessionSuccessPage() {
     link.click();
   };
 
-  if (isLoading) return <div className="flex items-center justify-center h-screen bg-background text-sm animate-pulse">Generating Report...</div>;
+  const finalTable = useMemo(() => session?.final_table || [], [session]);
 
-  const finalTable = session?.final_table || [];
+  // Single pass over the table instead of one filter() per stat on every render.
+  const stats = useMemo(() => {
+    let edits = 0, flagged = 0, headers = 0, identified = 0, unknown = 0;
+    for (const r of finalTable) {
+      if (r.status === 'correction' || r.rawOverride) edits++;
+      if (r.status === 'flagged') flagged++;
+      if (r.isHeader) headers++;
+      else if (r.suggestedMember) identified++;
+      else unknown++;
+    }
+    return { edits, flagged, headers, identified, unknown, dqi: computeDataQualityIndex(finalTable) };
+  }, [finalTable]);
+
+  if (isLoading) return <div className="flex items-center justify-center h-screen bg-background text-sm animate-pulse">Generating Report...</div>;
 
   if (finalTable.length === 0) {
     return (
@@ -174,20 +187,20 @@ export default function SessionSuccessPage() {
               <div className="p-4 rounded-2xl bg-primary/5 border border-primary/10">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Data Quality Index</span>
-                  <span className="text-xs font-black text-primary">{computeDataQualityIndex(finalTable)}%</span>
+                  <span className="text-xs font-black text-primary">{stats.dqi}%</span>
                 </div>
                 <div className="h-1.5 w-full bg-primary/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary transition-all duration-1000" style={{ width: `${computeDataQualityIndex(finalTable)}%` }} />
+                  <div className="h-full bg-primary transition-all duration-1000" style={{ width: `${stats.dqi}%` }} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 rounded-2xl bg-accent/30 border border-border text-center">
-                  <div className="text-xl font-black">{finalTable.filter(r => r.status === 'correction' || r.rawOverride).length}</div>
+                  <div className="text-xl font-black">{stats.edits}</div>
                   <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Manual Edits</div>
                 </div>
                 <div className="p-4 rounded-2xl bg-accent/30 border border-border text-center">
-                  <div className="text-xl font-black text-rose-500">{finalTable.filter(r => r.status === 'flagged').length}</div>
+                  <div className="text-xl font-black text-rose-500">{stats.flagged}</div>
                   <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Flagged</div>
                 </div>
               </div>
@@ -197,15 +210,15 @@ export default function SessionSuccessPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-[10px] font-bold">
                     <span>Headers</span>
-                    <span>{finalTable.filter(r => r.isHeader).length}</span>
+                    <span>{stats.headers}</span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] font-bold">
                     <span>Identified Records</span>
-                    <span>{finalTable.filter(r => !r.isHeader && r.suggestedMember).length}</span>
+                    <span>{stats.identified}</span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] font-bold">
                     <span>Unknown Entities</span>
-                    <span>{finalTable.filter(r => !r.isHeader && !r.suggestedMember).length}</span>
+                    <span>{stats.unknown}</span>
                   </div>
                 </div>
               </div>
