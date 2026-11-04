@@ -8,18 +8,11 @@
 - **Description:** OCR-based attendance register marking (Next.js 15, Supabase, tesseract.js, Fuse.js)
 - **Default branch:** `main` (protected — never pushed to directly)
 - **Review baseline:** commit `1c8c401`
-- **Last reviewed:** 2026-10-03
+- **Last reviewed:** 2026-11-04 (status markers only)
 
-> **CRITICAL — `main` is currently BROKEN (found 2026-10-01).**
-> Commit `5f52560` added a step-0 exact-match block to `matchEngine.ts` but did not delete
-> the pre-existing one at old lines 59-73. Both declare `const exactMatch` in the same
-> block scope, so **`main` does not compile**: `npm test` fails with
-> `The symbol "exactMatch" has already been declared`, `npx tsc --noEmit` reports
-> `TS2451: Cannot redeclare block-scoped variable 'exactMatch'` at lines 31 and 60, and
-> `npm run build` fails. All 5 open PRs are based on this broken `main` and will not pass
-> CI until it is fixed. **This is fixed by branch `fix/anchor-id-exact-match` (backlog
-> #1)** — merge that PR first; the other PRs rebase onto it. Note that the "uncommitted
-> working-tree change" described in §7 is exactly this de-duplication and is the same fix.
+> **Status refresh 2026-11-04.** The historical "main is broken" banner is resolved: `main` compiles and
+> the Test workflow runs on every PR. Most P0/P1 items below are merged (see ✅ markers and
+> `docs/AUTOMATION_PROGRESS.md`). Analysis text under each item is kept for history; trust the markers.
 
 ---
 
@@ -111,25 +104,13 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ---
 
-## 2. Headline state
+## 2. Headline state (refreshed 2026-11-04)
 
-- **`main` does not compile.** See the banner at the top. Fixed on `fix/anchor-id-exact-match`;
-  all 5 open PRs depend on that being merged.
-- **4 P0 bugs remain open** (#2, #3, #4, #5) — three of which are **silent data corruption**
-  into the `attendance` table. All four are already covered by open PRs #2, #3, #4, #5.
-- The most severe *remaining* bug is **#4** — `flagRow` is advisory only, so rows the operator
-  explicitly flagged as wrong are written to `attendance` as `present = TRUE`. PR #2 fixes the
-  SQL half; the client-side approval gate is still open.
-- **Two halves of the app use incompatible auth strategies** (cookies vs `localStorage`),
-  with no bridge — the app is expected to be unusable in any deployment where middleware runs.
-  (PR #3.)
-- **Four shipped-looking features are permanently dead** because three semantic fields are
-  dropped before persistence (the "Approve All Data" button approves *zero rows*). (PR #4.)
-- **Security:** `members` and `corrections` are readable *and writable* by every authenticated
-  user, exposing `full_name`, `email`, `phone`, `department` across tenants. **Unaddressed —
-  no PR. This is now the sharpest unclaimed risk in the repo (#13).**
-- **Testing:** two test files. `matchEngine` is now well covered (23 cases, verified to fail
-  against the pre-fix code); the approval path and the entire SQL layer still have zero coverage.
+- `main` compiles; CI (Test workflow) runs on every PR. Items #0–#10, #12, #17–#21, #23, #25, #26 (script), #30, #36 are closed.
+- **Still open and highest risk: #13** — `members`/`corrections` RLS is `USING (true)` across tenants
+  (PII exposure). Needs a plan in `docs/plans/` first (tenancy model must be chosen by the owner).
+- Other open items: #1b, #11, #14, #15, #16, #22, #24, #27–#29, #31–#35, #37–#39.
+- Testing: SQL layer (`approve_session`) still has no tests (#28).
 
 ---
 
@@ -177,7 +158,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   (e.g. `reg_no TEXT UNIQUE`) matched with `^`/`$`. That is a schema migration (#27), not a
   bug fix.
 
-**2. Two incompatible auth strategies — `middleware.ts` vs `src/lib/supabase.ts`**
+**2. Two incompatible auth strategies — `middleware.ts` vs `src/lib/supabase.ts`** — ✅ FIXED (merged PR #3; status verified 2026-11-04)
 - `middleware.ts:6-17`, `src/lib/supabase.ts:12`, `src/app/login/page.tsx:26-36`
 - `middleware.ts` builds a `@supabase/ssr` client reading **cookies only**. `supabase.ts:12`
   builds a plain `createClient(url, anonKey)` with **no `storage` option** → session lives in
@@ -190,7 +171,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   from `@supabase/ssr` and add an `onAuthStateChange` subscriber that writes cookies.
   Also wrap `getUser()` in try/catch and add `|tesseract/|\..*` to the matcher (see #6).
 
-**3. `approve_session` inserts attendance rows with `member_id = NULL` for every unmatched line**
+**3. `approve_session` inserts attendance rows with `member_id = NULL` for every unmatched line** — ✅ FIXED (merged PR #2; status verified 2026-11-04)
 - `database/schema.sql:87-91`
 - `row->'suggestedMember' IS NOT NULL` is **true for a JSON `null`** (a value, not SQL NULL),
   so `status:'none'` rows pass the filter, `->>'id'` evaluates to SQL NULL, and
@@ -200,7 +181,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   Then `ALTER TABLE attendance ALTER COLUMN member_id SET NOT NULL` to make the class of
   bug unrepresentable.
 
-**4. `flagRow` and the review gate are advisory — flagged and never-reviewed rows are recorded as present**
+**4. `flagRow` and the review gate are advisory — flagged and never-reviewed rows are recorded as present** — ✅ FIXED (merged PRs #2, #7, #8; status verified 2026-11-04)
 - `database/schema.sql:86-91`, `src/app/sessions/[id]/page.tsx:157-166, 253-254, 288, 366`
 - The SQL filter never consults `row->>'status'`. The finalize button has no gate on
   `approvedCount` / `progressPct` (computed at `:253-254`, displayed but never enforced).
@@ -240,7 +221,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
     fuzzy matcher here, because confidence and correctness are anti-correlated at short
     lengths. Any future attempt to add one should be rejected with this measurement in hand.
 
-**5. `region` / `explanation` / `semanticConfidence` are dropped before persistence, silently killing four features**
+**5. `region` / `explanation` / `semanticConfidence` are dropped before persistence, silently killing four features** — ✅ FIXED (merged PR #4; status verified 2026-11-04)
 - Producer `src/app/attendance/new/page.tsx:67-76`; consumers at
   `src/app/sessions/[id]/page.tsx:195, 213, 322-330, 366, 441-442, 521-539`
 - The `.map` copies 7 named fields and omits the three semantic fields that
@@ -254,7 +235,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   `{ ...res, ...extractedLines[i], ocrName: res.ocrName, status: res.status, suggestedMember: res.suggestedMember, confidence: res.confidence }`.
   Then delete the seven `(row as any)` casts in the consumer — the types already declare these fields.
 
-**6. `validateUpload` throws outside the caller's `try` — unhandled rejection, no user feedback**
+**6. `validateUpload` throws outside the caller's `try` — unhandled rejection, no user feedback** — ✅ FIXED (merged PR #5; status verified 2026-11-04)
 - Caller `src/app/attendance/new/page.tsx:32-40`; `handleDrop:150`
 - A non-image MIME type or a >10 MB file throws at `:34`, *before* the `try` at `:40`, from an
   async function called without `.catch()` at `:143`/`:150`. Nothing is shown; the file is
@@ -265,7 +246,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 
 ### P1 — Significant
 
-**7. `validateRow` corrections are discarded on exactly the rows that needed them**
+**7. `validateRow` corrections are discarded on exactly the rows that needed them** — ✅ FIXED (merged PRs #10, #11; status verified 2026-11-04)
 - `src/OCR/ocrService.ts:192-221` — **an inverted condition**
 - `finalCols = validation.correctedColumns` is assigned in the `else` at `:220` and inside
   `if (healed)` at `:217`, but **not** when the low-confidence branch is taken and nothing
@@ -275,7 +256,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** assign `finalCols = validation.correctedColumns` unconditionally after the fallback
   loop, then overwrite with the healed result if `healed`. Remove the `else`.
 
-**8. Roster/corrections fetch race + swallowed errors**
+**8. Roster/corrections fetch race + swallowed errors** — ✅ FIXED (merged PR #12; status verified 2026-11-04)
 - `src/app/attendance/new/page.tsx:22-30, 61-65`
 - `processFile` reads `members`/`corrections` from the render closure and nothing blocks
   upload until the fetch resolves → a fast user matches against `[]` → every row
@@ -284,14 +265,14 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** load the roster inside the same `try` immediately before `matchMembers` (or track
   a `rosterLoaded` promise), surface `error` in the UI, disable the dropzone until resolved.
 
-**9. Unanchored `/no\.?/` classifies ordinary headers as `serial`, and `normalizeSerial` then destroys their contents**
+**9. Unanchored `/no\.?/` classifies ordinary headers as `serial`, and `normalizeSerial` then destroys their contents** — ✅ FIXED (merged PR #9; status verified 2026-11-04)
 - `src/lib/semanticAnalyzer.ts:217` (fork at `src/app/sessions/[id]/page.tsx:60`); consumer `src/lib/dataCorrector.ts:54-55, 97-100`
 - **Verified by execution:** `Notes`, `Nomination`, `Notional` → `serial`. A `serial` column is
   routed to `normalizeSerial`, which strips every non-digit. Data-destroying, silent, and it
   happens inside the pipeline before the operator ever sees the row.
 - **Fix:** `/\b(?:sr|no|serial)\b\.?|^#/i`. Add the regression cases from #21.
 
-**10. Two forked column-type inference implementations that already disagree**
+**10. Two forked column-type inference implementations that already disagree** — ✅ FIXED (merged PR #13; status verified 2026-11-04)
 - `src/lib/semanticAnalyzer.ts:214-238` vs `src/app/sessions/[id]/page.tsx:53-70`
 - **Verified by execution:** the page's copy labels `Present`/`Absent`/`LWP` as `numeric` because
   it tests that regex (`:64`) *before* `/status/`, and lacks `date`/`text` entirely. The page then
@@ -383,7 +364,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** implement real polarity detection, or surface a clear "dark-background scans are not
   supported" error rather than emitting a garbage grid.
 
-**23. `login/page.tsx:26` has no try/catch** — `getSupabaseClient()` throws when env vars are
+✅ FIXED (merged PR #16; verified 2026-11-04) **23. `login/page.tsx:26` has no try/catch** — `getSupabaseClient()` throws when env vars are
 missing, through the Proxy at `supabase.ts:17-21` on first property access. The throw skips the
 `if (error)` branch, so `isLoading` stays `true` forever — a permanently disabled button with no
 message. Same class of problem for every unguarded `supabase.*` call.
