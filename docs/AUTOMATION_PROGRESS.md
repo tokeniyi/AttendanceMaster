@@ -14,13 +14,20 @@
 - Backlog #21: keyboard-handler effect in `sessions/[id]/page.tsx` now lists `history` in its deps (2026-11-02). Backlog #7, #9, #20 verified already fixed in code (2026-11-02); MAINTENANCE.md text for #7/#9 still stale.
 - Backlog #30: success-page analytics computed in one `useMemo` pass (2026-11-03). Backlog #26: added `npm run typecheck` script (2026-11-03); CI wiring needs the owner (.github off-limits).
 
+- MAINTENANCE.md status refresh: banner, headline and ✅ markers for #2–#10, #23 (2026-11-04).
+
 ## Outstanding
-- MAINTENANCE.md status refresh: only #18/#19/#36 marked so far; other merged items (#12–#16 etc.) still show stale text.
 - Next small candidate: #38 (version strings: package.json 0.1.0 vs Sidebar v1.1.0; owner should pick the canonical version).
 - Local `npm run build` fails offline (next/font cannot fetch Inter from Google Fonts); rely on the Test workflow for build.
 - Large items needing a plan first (docs/plans/): #13 (members/corrections RLS), #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-04 (Africa/Lagos) — branch claude/dev-2026-11-04
+- Changed: `docs/MAINTENANCE.md` (removed stale "main is broken" banner, refreshed headline, ✅ markers for #2–#10 and #23 after checking the code/schema), this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 122/122 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: #13 (RLS) still needs an owner decision on the tenancy model before a plan can be validated; #38 awaits canonical version.
 
 ### 2026-11-03 (Africa/Lagos) — branch claude/dev-2026-11-03
 - Changed: `src/app/sessions/[id]/success/page.tsx` (#30), `package.json` (typecheck script, #26), `docs/MAINTENANCE.md`, this file.
