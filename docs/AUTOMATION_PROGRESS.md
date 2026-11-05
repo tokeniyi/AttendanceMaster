@@ -16,12 +16,21 @@
 
 - MAINTENANCE.md status refresh: banner, headline and ✅ markers for #2–#10, #23 (2026-11-04).
 
+- Backlog #15 (partial): dashboard (`src/app/page.tsx`) runs its three counts and recent-sessions query in one `Promise.all` and selects only rendered columns (2026-11-05).
+
 ## Outstanding
+- #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating; also narrow `members`/`corrections` selects (#29) in `attendance/new`, `sessions/[id]`, `members` pages (check which columns Fuse/matchEngine and UI read first).
 - Next small candidate: #38 (version strings: package.json 0.1.0 vs Sidebar v1.1.0; owner should pick the canonical version).
 - Local `npm run build` fails offline (next/font cannot fetch Inter from Google Fonts); rely on the Test workflow for build.
 - Large items needing a plan first (docs/plans/): #13 (members/corrections RLS), #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-05 (Africa/Lagos) — branch claude/dev-2026-11-05
+- Changed: `src/app/page.tsx` (#15 partial: parallel counts, narrowed recent-sessions select), `docs/MAINTENANCE.md` (#15 marker), this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 122/122 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: history page selects `*` because it renders `suggested_table.length`; narrowing needs a schema/count change. #38 awaits owner's canonical version; #13 awaits tenancy decision.
 
 ### 2026-11-04 (Africa/Lagos) — branch claude/dev-2026-11-04
 - Changed: `docs/MAINTENANCE.md` (removed stale "main is broken" banner, refreshed headline, ✅ markers for #2–#10 and #23 after checking the code/schema), this file.
