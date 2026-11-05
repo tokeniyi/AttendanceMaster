@@ -22,32 +22,28 @@ export default function Dashboard() {
     recentSessions: 0
   });
   const [isLoading, setIsLoading] = useState(true);
-  const [recentSessions, setRecentSessions] = useState<Session[]>([]);
+  const [recentSessions, setRecentSessions] = useState<Pick<Session, 'id' | 'event_name' | 'status' | 'created_at'>[]>([]);
 
   useEffect(() => {
     async function fetchStats() {
-      const { count: memberCount } = await supabase
-        .from('members')
-        .select('*', { count: 'exact', head: true });
-        
-      const { count: attendanceCount } = await supabase
-        .from('attendance')
-        .select('*', { count: 'exact', head: true });
-
-      const { count: sessionCount } = await supabase
-        .from('sessions')
-        .select('*', { count: 'exact', head: true });
+      const [members, attendance, sessions, recent] = await Promise.all([
+        supabase.from('members').select('id', { count: 'exact', head: true }),
+        supabase.from('attendance').select('id', { count: 'exact', head: true }),
+        supabase.from('sessions').select('id', { count: 'exact', head: true }),
+        // Only the columns the dashboard renders; avoids pulling raw_ocr_data JSONB.
+        supabase
+          .from('sessions')
+          .select('id, event_name, status, created_at')
+          .order('created_at', { ascending: false })
+          .limit(5),
+      ]);
 
       setStats({
-        members: memberCount || 0,
-        totalAttendance: attendanceCount || 0,
-        recentSessions: sessionCount || 0
+        members: members.count || 0,
+        totalAttendance: attendance.count || 0,
+        recentSessions: sessions.count || 0
       });
-      const { data: sessionData } = await supabase
-        .from('sessions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
+      const sessionData = recent.data;
 
       setRecentSessions(sessionData || []);
       setIsLoading(false);

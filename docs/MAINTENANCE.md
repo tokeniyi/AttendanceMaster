@@ -313,7 +313,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 - **Fix:** a `BEFORE DELETE ON sessions` trigger that removes the storage object
   (`storage.foldername(name)[1] = owner_id::text`), or delete the object in the same request.
 
-**15. Unbounded queries, two of which pull full OCR JSONB per row**
+**15. Unbounded queries, two of which pull full OCR JSONB per row** — ◐ PARTIAL (2026-11-05: dashboard `Promise.all` + narrowed select done; history/members/new/session selects remain)
 - `src/app/attendance/history/page.tsx:35-38` (no `.limit()`, `select('*')` → `raw_ocr_data` +
   `suggested_table` for every session), `src/app/page.tsx:29-50` (three sequential count
   round-trips), `src/app/attendance/new/page.tsx:24-25`, `src/app/sessions/[id]/page.tsx:77`,
