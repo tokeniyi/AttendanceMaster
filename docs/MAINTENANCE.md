@@ -404,7 +404,7 @@ deployed. Adopt `supabase/migrations/` with numbered timestamped files.
 `approve_session` and `upsert_correction`. The row-selection contract is the enforcement
 point for #3 and #4 and currently has zero coverage.
 
-**29. Narrow the roster selects** — the members fetches repeat three times across the app and
+**29. Narrow the roster selects** — ✅ DONE (2026-11-06; `phone`/`created_at` no longer fetched, `Member.created_at` and `Correction.frequency/created_at` made optional) — the members fetches repeat three times across the app and
 include never-rendered PII columns.
 
 **30. Memoise the success-page analytics** — ✅ DONE (2026-11-03, single-pass `useMemo`) — `success/page.tsx:158-189` performs 7 inline

@@ -35,8 +35,8 @@ export default function NewAttendancePage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const { data: m, error: mErr } = await supabase.from('members').select('*');
-        const { data: c, error: cErr } = await supabase.from('corrections').select('*');
+        const { data: m, error: mErr } = await supabase.from('members').select('id, full_name, aliases');
+        const { data: c, error: cErr } = await supabase.from('corrections').select('id, incorrect_text, corrected_member_id');
         if (mErr) throw mErr;
         if (cErr) throw cErr;
         if (m) setMembers(m);
