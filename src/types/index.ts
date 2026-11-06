@@ -5,7 +5,8 @@ export interface Member {
   department?: string;
   phone?: string;
   email?: string;
-  created_at: string;
+  /** Not fetched by the narrowed roster selects; optional. */
+  created_at?: string;
 }
 
 export interface AttendanceRecord {
@@ -21,8 +22,9 @@ export interface Correction {
   id: string;
   incorrect_text: string;
   corrected_member_id: string;
-  frequency: number;
-  created_at: string;
+  /** Not fetched by the narrowed corrections select; optional. */
+  frequency?: number;
+  created_at?: string;
 }
 
 export interface OCRResult {

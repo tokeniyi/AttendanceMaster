@@ -76,7 +76,7 @@ export default function SessionWorkspace() {
       setIsLoading(true);
       const [sRes, mRes] = await Promise.all([
         supabase.from('sessions').select('*').eq('id', id).single(),
-        supabase.from('members').select('*'),
+        supabase.from('members').select('id, full_name, aliases'),
       ]);
       if (sRes.data) {
         setSession(sRes.data);

@@ -25,7 +25,7 @@ export default function MembersPage() {
   async function fetchMembers() {
     const { data, error } = await supabase
       .from('members')
-      .select('*')
+      .select('id, full_name, aliases, department, email')
       .order('full_name', { ascending: true });
     
     if (data) setMembers(data);
