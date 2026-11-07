@@ -424,7 +424,7 @@ pipeline, the storage-key decision, and the RLS ownership model.
 **33. Fix layout nesting in the workspace** — `sessions/[id]/page.tsx:257` uses `h-screen`
 inside `layout.tsx:24`'s `p-8 overflow-y-auto h-screen` `<main>` → nested scroll containers.
 
-**34. Wire up or remove the non-functional controls** — "Add Member" (`members/page.tsx:75-78`),
+**34. Wire up or remove the non-functional controls** — Logout ✅ wired to `supabase.auth.signOut()` (2026-11-07); rest still open — "Add Member" (`members/page.tsx:75-78`),
 row trash/edit (`:111-116`), "Filter" (`attendance/history/page.tsx:106-108`), "Logout"
 (`Sidebar.tsx:79-82` — no `signOut` exists), and the hardcoded `href="#"` workspace list
 (`Sidebar.tsx:66-76`).

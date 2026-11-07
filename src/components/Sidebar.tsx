@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { 
   LayoutDashboard, 
   Users, 
@@ -11,6 +12,7 @@ import {
   LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -21,6 +23,21 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleLogout() {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      // Misconfigured env or network failure: still leave the app; the
+      // middleware sends unauthenticated users to /login anyway.
+      console.error("Sign out failed", err);
+    }
+    // Full navigation so the middleware re-evaluates the (now cleared) cookies.
+    window.location.href = "/login";
+  }
 
   return (
     <div className="flex h-screen w-64 flex-col bg-card border-r border-border">
@@ -76,9 +93,13 @@ export function Sidebar() {
         </div>
       </nav>
       <div className="border-t border-border p-4">
-        <button className="group flex w-full items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={signingOut}
+          className="group flex w-full disabled:opacity-50 items-center rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
           <LogOut className="mr-3 h-5 w-5 text-muted-foreground group-hover:text-accent-foreground" />
-          Logout
+          {signingOut ? "Signing out…" : "Logout"}
         </button>
       </div>
     </div>
