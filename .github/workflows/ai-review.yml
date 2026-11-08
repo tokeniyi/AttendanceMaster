@@ -180,7 +180,7 @@ jobs:
               core.notice('PR changed while reviewing; suppressing stale results');
               return;
             }
-            const body = [
+            let body = [
               marker, '## Kilo AI code review',
               `**Head commit:** \`${pr.head.sha}\``,
               `**Model:** \`${process.env.KILO_MODEL}\``,
@@ -193,6 +193,18 @@ jobs:
               '', review.slice(0,53000), '',
               '_Automated advisory review only; not an approval or a substitute for CI and human review._'
             ].join('\n');
+            // GitHub issue comments have a byte budget; avoid partial UTF-8 at the boundary.
+            const maxCommentBytes = 60000;
+            const encoded = Buffer.from(body, 'utf8');
+            if (encoded.length > maxCommentBytes) {
+              const suffix = '\n\n_[Review truncated to fit GitHub comment limits.]_';
+              const budget = maxCommentBytes - Buffer.byteLength(suffix, 'utf8');
+              body = encoded.subarray(0, budget).toString('utf8').replace(/\uFFFD+$/, '') + suffix;
+            }
+            if (Buffer.byteLength(body, 'utf8') > maxCommentBytes) {
+              throw new Error('Review comment exceeds the configured size budget.');
+            }
+
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,repo,issue_number:pull_number,per_page:100
             });
