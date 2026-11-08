@@ -20,6 +20,7 @@ import { supabase } from "@/lib/supabase";
 import { Session } from "@/types";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { deleteSessionAndScan } from "@/services/sessionDeletion";
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -45,9 +46,18 @@ export default function SessionsPage() {
     e.preventDefault(); // prevent navigation
     if (!confirm('Are you sure you want to delete this session?')) return;
     
-    // Optimistic UI
+    const target = sessions.find(x => x.id === id);
+    if (!target) return;
+
+    // Optimistic UI, rolled back if the row delete fails.
     setSessions(s => s.filter(x => x.id !== id));
-    await supabase.from('sessions').delete().eq('id', id);
+    const result = await deleteSessionAndScan(supabase, target);
+    if (!result.deleted) {
+      setSessions(s => [...s, target].sort((a, b) => b.created_at.localeCompare(a.created_at)));
+      alert(`Could not delete the session: ${result.error ?? 'unknown error'}`);
+    } else if (!result.scanRemoved) {
+      console.error('Session deleted but its scan image could not be removed:', result.error);
+    }
   }
 
   const getStatusBadge = (status: Session['status']) => {

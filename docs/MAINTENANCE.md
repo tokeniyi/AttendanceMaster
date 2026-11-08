@@ -305,7 +305,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
   `attendance`, `sessions` to it, or — if single-tenant is the intent — say so explicitly in
   the schema and README and drop the multi-tenant framing from the policies.
 
-**14. Deleted sessions leave PII scans orphaned in storage forever**
+**14. Deleted sessions leave PII scans orphaned in storage forever** — ✅ FIXED client-side (2026-11-08, `deleteSessionAndScan`; storage DELETE policy must exist, not in repo)
 - `src/app/attendance/history/page.tsx:44-51`, `database/schema.sql:61`
 - The DB row cascades; the `attendance-scans/{user_id}/{uuid}.jpg` object does not. Once the
   session row is gone the object is unreachable but retained indefinitely, outside RLS's
