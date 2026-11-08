@@ -21,14 +21,23 @@
 - Backlog #29: roster/corrections selects narrowed in `attendance/new`, `sessions/[id]`, `members` pages; `Member.created_at`, `Correction.frequency/created_at` made optional (2026-11-06).
 - Backlog #34 (partial): sidebar Logout button now calls `supabase.auth.signOut()` and hard-navigates to `/login` (2026-11-07).
 
+- Backlog #14: history delete now goes through `deleteSessionAndScan` (removes the scan object after the row, rolls back UI and alerts if the row delete fails) (2026-11-08).
+
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
 - #34 remainder: dead 'Add Member', row edit/trash, history 'Filter', hardcoded 'Recent Workspaces' links in Sidebar — owner should decide implement vs remove.
+- #14 follow-up: the repo has no storage policies; owner must confirm `storage.objects` allows owners to DELETE under `attendance-scans/{uid}/` (else scan removal logs an error). A DB trigger is the stricter alternative.
 - Next small candidate: #38 (version strings: package.json 0.1.0 vs Sidebar v1.1.0; owner should pick the canonical version).
 - Local `npm run build` fails offline (next/font cannot fetch Inter from Google Fonts); rely on the Test workflow for build.
 - Large items needing a plan first (docs/plans/): #13 (members/corrections RLS), #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-08 (Africa/Lagos) — branch claude/dev-2026-11-08
+- Changed: `src/services/sessionDeletion.ts` (+test, 4 cases), `src/app/attendance/history/page.tsx` (#14), `docs/MAINTENANCE.md`, this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 126/126 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: no storage policies in repo (see Outstanding); #38 awaits canonical version; #13/#2 need plans/owner decisions.
 
 ### 2026-11-07 (Africa/Lagos) — branch claude/dev-2026-11-07
 - Changed: `src/components/Sidebar.tsx` (#34 Logout wired: signOut with try/catch, disabled while pending, full navigation to /login), `docs/MAINTENANCE.md`, this file.
