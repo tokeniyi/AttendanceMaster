@@ -356,7 +356,7 @@ URL UNVERIFIED — `node_modules` not installed during review.)*
 **21. Keyboard handler closes over stale `history`** — ✅ FIXED (2026-11-02, `history` added to effect deps)
 - `src/app/sessions/[id]/page.tsx:113-124` — undo/redo state read from a stale closure.
 
-**22. Inverted (dark-background) images are unsupported but silently produce garbage**
+**22. Inverted (dark-background) images are unsupported but silently produce garbage** — ✅ FIXED (2026-11-09, `detectInverted` mean-luminance polarity check wired into `detectTableGrid`)
 - `src/lib/tableSegmenter.ts:57, 118`, `src/OCR/ocrService.ts:102, 200`
 - The comment at `:118` claims inversion is handled inside `binarize`, but `binarize` only
   inverts when passed `isInverted` and `detectTableGrid` calls it bare. There is no polarity

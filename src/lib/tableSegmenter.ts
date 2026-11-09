@@ -4,7 +4,7 @@
  * This is the standard algorithm for table detection in browser environments.
  */
 
-import { binarize, dilate, analyzeCellDensity, type CellAnalysis } from './computerVision';
+import { binarize, detectInverted, dilate, analyzeCellDensity, type CellAnalysis } from './computerVision';
 
 export interface CellRegion {
   rowIdx: number;
@@ -54,7 +54,8 @@ export async function detectTableGrid(
   const raw = ctx.getImageData(0, 0, sW, sH);
   
   // ─── Step 2: Binarize & Detect Polarity ──────────────────────────────────
-  const bin = binarize(raw);
+  const isInverted = detectInverted(raw);
+  const bin = binarize(raw, isInverted);
 
   // ─── Step 3: Morphological Preprocessing for Layout Inference ────────────
   // We use smaller kernels since the image is downscaled
@@ -115,7 +116,7 @@ export async function detectTableGrid(
     colBoundaries,
     imageWidth: W,
     imageHeight: H,
-    isInverted: false, // We handle inversion inside binarize now
+    isInverted,
   };
 }
 
