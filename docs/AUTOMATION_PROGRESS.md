@@ -23,6 +23,8 @@
 
 - Backlog #14: history delete now goes through `deleteSessionAndScan` (removes the scan object after the row, rolls back UI and alerts if the row delete fails) (2026-11-08).
 
+- Backlog #22: added `detectInverted` (mean-luminance polarity check) in `computerVision.ts`; `detectTableGrid` now binarizes with it and sets `grid.isInverted`, so dark-background scans are flipped per cell (2026-11-09).
+
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
 - #34 remainder: dead 'Add Member', row edit/trash, history 'Filter', hardcoded 'Recent Workspaces' links in Sidebar — owner should decide implement vs remove.
@@ -32,6 +34,12 @@
 - Large items needing a plan first (docs/plans/): #13 (members/corrections RLS), #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-09 (Africa/Lagos) — branch claude/dev-2026-11-09
+- Changed: `src/lib/computerVision.ts` (+`detectInverted`), `src/lib/tableSegmenter.ts`, new `src/lib/computerVision.test.ts` (4 cases), `docs/MAINTENANCE.md`, this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 130/130 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: the 110 mean-luminance cutoff is a heuristic, untested on real dark scans (no fixtures); mixed-polarity pages are not handled. Other outstanding items unchanged.
 
 ### 2026-11-08 (Africa/Lagos) — branch claude/dev-2026-11-08
 - Changed: `src/services/sessionDeletion.ts` (+test, 4 cases), `src/app/attendance/history/page.tsx` (#14), `docs/MAINTENANCE.md`, this file.

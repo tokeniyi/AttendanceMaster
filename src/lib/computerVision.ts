@@ -48,6 +48,25 @@ export function binarize(imageData: ImageData, isInverted = false): Uint8Array {
 }
 
 /**
+ * Detects a dark-background scan (light text on dark paper) from the mean
+ * luminance of the image. A typical register is mostly white paper, so a mean
+ * below the midpoint-ish cutoff means the page is dominated by dark pixels.
+ * Sampling every 4th pixel keeps this O(n/4) on large canvases.
+ */
+export function detectInverted(imageData: ImageData): boolean {
+  const { width, height, data } = imageData;
+  const size = width * height;
+  if (size === 0) return false;
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < size; i += 4) {
+    sum += 0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2];
+    n++;
+  }
+  return sum / n < 110;
+}
+
+/**
  * Connected Component Analysis (Fast 2-pass)
  * Finds isolated islands of pixels (text, lines, noise).
  */
