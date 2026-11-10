@@ -56,8 +56,17 @@ should instead restrict sign-up. The owner should confirm before Stage 2 is appl
 ## Risks
 - Stage 3 before Stage 2 hides all existing members from everyone (NULL owner matches nothing).
   Order matters; the schema file should not ship Stage 3 until the owner confirms the backfill.
-- `schema.sql` is re-run as a whole by hand; `CREATE POLICY` is not idempotent, so Stage 3 must
-  add `DROP POLICY IF EXISTS` for the new names too.
+- `schema.sql` is re-run as a whole by hand; `CREATE POLICY` is not idempotent. Stage 3 must
+  `DROP POLICY IF EXISTS "Authenticated users can manage members" ON members;` and
+  `DROP POLICY IF EXISTS "Authenticated users can manage corrections" ON corrections;` (the
+  existing `USING (true)` policies; permissive policies are OR-ed, so leaving either in place keeps
+  the leak), then drop-if-exists and create the new owner-scoped policies.
+- `approve_session` reads the member id from `row->'suggestedMember'->>'id'` (verified in
+  `schema.sql`), the same expression the ownership check must reuse.
+- `DEFAULT auth.uid()` only fills `owner_id` for JWT-bound callers. Service-role or SQL-editor bulk
+  loads must set `owner_id` explicitly.
+- `import_mappings` is also `USING (true)` and unused by the app; out of scope here, track
+  separately (drop it or owner-scope it).
 
 ## Open question for the owner
 Per-user rosters (this plan) or one shared roster per organisation?
