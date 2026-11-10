@@ -31,9 +31,18 @@
 - #14 follow-up: the repo has no storage policies; owner must confirm `storage.objects` allows owners to DELETE under `attendance-scans/{uid}/` (else scan removal logs an error). A DB trigger is the stricter alternative.
 - Next small candidate: #38 (version strings: package.json 0.1.0 vs Sidebar v1.1.0; owner should pick the canonical version).
 - Local `npm run build` fails offline (next/font cannot fetch Inter from Google Fonts); rely on the Test workflow for build.
-- Large items needing a plan first (docs/plans/): #13 (members/corrections RLS), #2 (auth cookie split).
+- #13: plan written and validated (docs/plans/members-corrections-rls.md); owner must confirm per-user vs shared roster, then Stage 1 (add nullable `owner_id` default `auth.uid()` to members/corrections in schema.sql) can start. Do not ship Stage 3 (tight policies) before the owner backfills.
+- Finding: `upsert_correction` is never called by the app, so the corrections table is never written (correction learning is dormant). Owner to decide implement vs remove (README claim, #31).
+- Large items still needing a plan: #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-10 (Africa/Lagos) — branch claude/dev-2026-11-10
+- Changed: new `docs/plans/members-corrections-rls.md` (#13 plan, validated against schema.sql and all roster call sites), this file. Docs only; no code touched.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Plan validation: checked every `members`/`corrections` query (no app filter changes needed), CSV insert needs `owner_id` default, corrections UNIQUE must become per-owner, `approve_session` FK bypass of RLS needs a member-ownership check, backfill needs owner action.
+- Verification: `npm ci --legacy-peer-deps` OK; tests/build not re-run (docs-only change).
+- Found but not changed: `upsert_correction` is dead (never called). Other outstanding items unchanged.
 
 ### 2026-11-09 (Africa/Lagos) — branch claude/dev-2026-11-09
 - Changed: `src/lib/computerVision.ts` (+`detectInverted`), `src/lib/tableSegmenter.ts`, new `src/lib/computerVision.test.ts` (4 cases), `docs/MAINTENANCE.md`, this file.
