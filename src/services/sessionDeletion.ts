@@ -6,6 +6,8 @@
  * after the row so a failed row delete never leaves a session pointing at a missing image.
  */
 
+import { SCANS_BUCKET } from "@/lib/config";
+
 interface DbResult { error: { message: string } | null }
 
 /** Minimal structural slice of the Supabase client used here (keeps this unit-testable). */
@@ -14,7 +16,7 @@ export interface SessionDeletionClient {
     delete(): { eq(column: "id", value: string): PromiseLike<DbResult> };
   };
   storage: {
-    from(bucket: "attendance-scans"): {
+    from(bucket: string): {
       remove(paths: string[]): PromiseLike<DbResult>;
     };
   };
@@ -39,7 +41,7 @@ export async function deleteSessionAndScan(
   if (!session.image_url) return { deleted: true, scanRemoved: true };
 
   try {
-    const res = await client.storage.from("attendance-scans").remove([session.image_url]);
+    const res = await client.storage.from(SCANS_BUCKET).remove([session.image_url]);
     if (res.error) return { deleted: true, scanRemoved: false, error: res.error.message };
   } catch (e) {
     return { deleted: true, scanRemoved: false, error: e instanceof Error ? e.message : String(e) };

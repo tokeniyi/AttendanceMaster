@@ -8,6 +8,7 @@ import {
 } from '@/lib/tableSegmenter';
 import { analyseDocument, classifyRow, inferColumnSchema, type SemanticDocument } from '@/lib/semanticAnalyzer';
 import { finalizeRowColumns } from '@/lib/dataCorrector';
+import { TESSERACT_WORKER_PATH, TESSERACT_CORE_PATH } from '@/lib/config';
 
 export type { SemanticDocument };
 
@@ -79,13 +80,13 @@ export async function performOCR(
   // still terminates the ones already created (see finally).
   try {
   for (let i = 0; i < numWorkers; i++) {
-    const w = await createWorker('eng', 1, { workerPath: '/tesseract/worker.min.js', corePath: '/tesseract/tesseract-core.wasm.js', workerBlobURL: false });
+    const w = await createWorker('eng', 1, { workerPath: TESSERACT_WORKER_PATH, corePath: TESSERACT_CORE_PATH, workerBlobURL: false });
     await w.setParameters({ tessedit_pageseg_mode: '7' as any, tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,/-()% ', preserve_interword_spaces: '0' as any });
     scheduler.addWorker(w);
   }
 
   // Persistent fallback worker for structurally anomalous cells
-  const fallbackWorker_ = await createWorker('eng', 1, { workerPath: '/tesseract/worker.min.js', corePath: '/tesseract/tesseract-core.wasm.js', workerBlobURL: false });
+  const fallbackWorker_ = await createWorker('eng', 1, { workerPath: TESSERACT_WORKER_PATH, corePath: TESSERACT_CORE_PATH, workerBlobURL: false });
   fallbackWorker = fallbackWorker_;
   await fallbackWorker_.setParameters({ tessedit_pageseg_mode: '8' as any, tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.,/-()% ', preserve_interword_spaces: '0' as any });
   const fb = fallbackWorker_;
@@ -261,8 +262,8 @@ async function runWordCluster(
 ): Promise<OCRLine[]> {
 
   const worker = await createWorker('eng', 1, {
-    workerPath: '/tesseract/worker.min.js',
-    corePath: '/tesseract/tesseract-core.wasm.js',
+    workerPath: TESSERACT_WORKER_PATH,
+    corePath: TESSERACT_CORE_PATH,
     workerBlobURL: false,
     logger: (m: any) => {
       if (m.status === 'recognizing text') {

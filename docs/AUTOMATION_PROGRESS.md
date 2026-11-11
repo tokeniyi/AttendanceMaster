@@ -25,6 +25,8 @@
 
 - Backlog #22: added `detectInverted` (mean-luminance polarity check) in `computerVision.ts`; `detectTableGrid` now binarizes with it and sets `grid.isInverted`, so dark-background scans are flipped per cell (2026-11-09).
 
+- Backlog #32: bucket name and tesseract worker/core paths moved into `src/lib/config.ts` and used by ocrService, attendance/new, sessions/[id], sessionDeletion (2026-11-11).
+
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
 - #34 remainder: dead 'Add Member', row edit/trash, history 'Filter', hardcoded 'Recent Workspaces' links in Sidebar — owner should decide implement vs remove.
@@ -36,6 +38,12 @@
 - Large items still needing a plan: #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-11 (Africa/Lagos) — branch claude/dev-2026-11-11
+- Changed: new `src/lib/config.ts`; `src/OCR/ocrService.ts`, `src/app/attendance/new/page.tsx`, `src/app/sessions/[id]/page.tsx`, `src/services/sessionDeletion.ts` now import the constants (#32; behaviour unchanged); `docs/MAINTENANCE.md`; this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Verification: existing `node_modules` used; `npm test` 130/130 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: #37 magic numbers (OCR quality tuning, needs fixtures), #33 layout nesting (needs visual check). Other outstanding items unchanged.
 
 ### 2026-11-10 (Africa/Lagos) — branch claude/dev-2026-11-10
 - Changed: new `docs/plans/members-corrections-rls.md` (#13 plan, validated against schema.sql and all roster call sites), this file. Docs only; no code touched.
