@@ -417,7 +417,7 @@ export instructions, either implement or delete the correction-learning claim, s
 claim until `.traineddata` is committed, and add an architecture section describing the 4-phase
 pipeline, the storage-key decision, and the RLS ownership model.
 
-**32. Replace hardcoded environment-specific values with config** — `ocrService.ts:78, 84, 256-257`
+**32. Replace hardcoded environment-specific values with config** — ✅ DONE (2026-11-11, `src/lib/config.ts`: `SCANS_BUCKET`, tesseract worker/core paths) — `ocrService.ts:78, 84, 256-257`
 (`/tesseract/...`), `attendance/new/page.tsx:106` and `sessions/[id]/page.tsx:82`
 (`attendance-scans`).
 

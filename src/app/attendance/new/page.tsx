@@ -6,6 +6,7 @@ import { performOCR } from "@/OCR/ocrService";
 import { matchMembers } from "@/matching/matchEngine";
 import { mergeMatchedRows } from "@/services/sessionRows";
 import { supabase } from "@/lib/supabase";
+import { SCANS_BUCKET } from "@/lib/config";
 import { Member, Correction } from "@/types";
 import { validateUpload } from "@/lib/uploadValidation";
 
@@ -134,7 +135,7 @@ export default function NewAttendancePage() {
         img.onerror = () => reject(new Error("Unable to read image."));
         img.src = objectUrl!;
       });
-      const { error: uploadError } = await supabase.storage.from("attendance-scans").upload(filePath, compressedImage, { contentType: "image/jpeg", upsert: false });
+      const { error: uploadError } = await supabase.storage.from(SCANS_BUCKET).upload(filePath, compressedImage, { contentType: "image/jpeg", upsert: false });
       if (uploadError) throw uploadError;
 
       // 3. Create session

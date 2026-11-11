@@ -9,6 +9,7 @@ import {
   Layers, CheckSquare, Download, Copy
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { SCANS_BUCKET } from "@/lib/config";
 import { bulkApprovableRows } from "@/services/sessionRows";
 import { Session, Member, MatchResult } from "@/types";
 import { cn } from "@/lib/utils";
@@ -81,7 +82,7 @@ export default function SessionWorkspace() {
       if (sRes.data) {
         setSession(sRes.data);
         if (sRes.data.image_url) {
-          const { data: signed } = await supabase.storage.from('attendance-scans').createSignedUrl(sRes.data.image_url, 300);
+          const { data: signed } = await supabase.storage.from(SCANS_BUCKET).createSignedUrl(sRes.data.image_url, 300);
           if (signed?.signedUrl) setSourceImageUrl(signed.signedUrl);
         }
         const data: MatchResult[] = sRes.data.suggested_table || [];
