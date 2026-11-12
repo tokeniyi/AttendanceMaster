@@ -27,6 +27,8 @@
 
 - Backlog #32: bucket name and tesseract worker/core paths moved into `src/lib/config.ts` and used by ocrService, attendance/new, sessions/[id], sessionDeletion (2026-11-11).
 
+- New finding (CSV injection): CSV exports (`success/page.tsx` download, `csvService.exportAttendanceCSV`) now go through `toSafeCSV` (papaparse `escapeFormulae`), so cells starting with = + - @ are prefixed with `'` (2026-11-12).
+
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
 - #34 remainder: dead 'Add Member', row edit/trash, history 'Filter', hardcoded 'Recent Workspaces' links in Sidebar — owner should decide implement vs remove.
@@ -38,6 +40,12 @@
 - Large items still needing a plan: #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-12 (Africa/Lagos) — branch claude/dev-2026-11-12
+- Changed: `src/services/csvService.ts` (+`toSafeCSV`), `src/app/sessions/[id]/success/page.tsx` (uses it; dropped direct Papa import), new `src/services/csvService.test.ts` (3 cases), this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 133/133 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: exported member CSV import (`parseMemberCSV`) trusts column names/values unvalidated (members page); leading `-` in a cell (e.g. negative numbers) is now quote-prefixed, acceptable for attendance text. Other outstanding items unchanged.
 
 ### 2026-11-11 (Africa/Lagos) — branch claude/dev-2026-11-11
 - Changed: new `src/lib/config.ts`; `src/OCR/ocrService.ts`, `src/app/attendance/new/page.tsx`, `src/app/sessions/[id]/page.tsx`, `src/services/sessionDeletion.ts` now import the constants (#32; behaviour unchanged); `docs/MAINTENANCE.md`; this file.
