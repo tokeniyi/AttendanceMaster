@@ -19,9 +19,8 @@ import { supabase } from "@/lib/supabase";
 import { Session, MatchResult } from "@/types";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { exportAttendanceCSV } from "@/services/csvService";
+import { toSafeCSV } from "@/services/csvService";
 import { computeDataQualityIndex } from "@/lib/analytics";
-import Papa from 'papaparse';
 
 export default function SessionSuccessPage() {
   const { id } = useParams();
@@ -60,7 +59,7 @@ export default function SessionSuccessPage() {
     });
     
     // Explicitly unparse with headers disabled to keep it clean
-    const csv = Papa.unparse(exportData, { header: false });
+    const csv = toSafeCSV(exportData, { header: false });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
