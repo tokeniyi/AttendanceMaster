@@ -1,13 +1,40 @@
 import Papa from 'papaparse';
 import { Member, AttendanceRecord } from '../types';
 
+/**
+ * Normalise raw CSV rows into insertable member rows. Only known columns are kept
+ * (unknown/extra columns such as `id` or `owner_id` are dropped so an uploaded file
+ * cannot set arbitrary fields), values are trimmed, rows without a full_name are skipped,
+ * and `aliases` (separated by `;` or `|`) become a string array.
+ */
+export function sanitizeMemberRows(rows: Record<string, unknown>[]): Partial<Member>[] {
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const out: Partial<Member>[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const full_name = str(row.full_name);
+    if (!full_name) continue;
+    const member: Partial<Member> = {
+      full_name,
+      aliases: str(row.aliases).split(/[;|]/).map(a => a.trim()).filter(Boolean),
+    };
+    const department = str(row.department);
+    const email = str(row.email);
+    if (department) member.department = department;
+    if (email) member.email = email;
+    out.push(member);
+  }
+  return out;
+}
+
 export function parseMemberCSV(file: File): Promise<Partial<Member>[]> {
   return new Promise((resolve, reject) => {
-    Papa.parse(file, {
+    Papa.parse<Record<string, unknown>>(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (h) => h.trim().toLowerCase().replace(/\s+/g, '_'),
       complete: (results) => {
-        resolve(results.data as Partial<Member>[]);
+        resolve(sanitizeMemberRows(results.data));
       },
       error: (error) => {
         reject(error);

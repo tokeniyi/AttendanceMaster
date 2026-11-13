@@ -38,9 +38,14 @@ export default function MembersPage() {
     setIsUploading(true);
     try {
       const data = await parseMemberCSV(file);
+      if (data.length === 0) {
+        alert('No valid rows found. The CSV needs a header row with a full_name column.');
+        return;
+      }
       // Map data and insert to Supabase
       const { error } = await supabase.from('members').insert(data);
-      if (!error) fetchMembers();
+      if (error) console.error(error);
+      else fetchMembers();
     } catch (err) {
       console.error(err);
     } finally {
