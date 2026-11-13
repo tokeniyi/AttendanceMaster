@@ -44,8 +44,12 @@ export default function MembersPage() {
       }
       // Map data and insert to Supabase
       const { error } = await supabase.from('members').insert(data);
-      if (error) console.error(error);
-      else fetchMembers();
+      if (error) {
+        console.error(error);
+        alert('Import failed: ' + error.message);
+      } else {
+        fetchMembers();
+      }
     } catch (err) {
       console.error(err);
     } finally {
