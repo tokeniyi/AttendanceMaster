@@ -31,6 +31,8 @@
 
 - New finding (member CSV import): `parseMemberCSV` now whitelists columns (full_name/aliases/department/email), trims, splits `;`/`|` aliases into an array, skips nameless rows; members page alerts on empty import (2026-11-13).
 
+- Member CSV import: malformed emails are dropped and duplicate names within a file are skipped (`sanitizeMemberRows`) (2026-11-14).
+
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
 - #34 remainder: dead 'Add Member', row edit/trash, history 'Filter', hardcoded 'Recent Workspaces' links in Sidebar — owner should decide implement vs remove.
@@ -42,6 +44,12 @@
 - Large items still needing a plan: #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-14 (Africa/Lagos) — branch claude/dev-2026-11-14
+- Changed: `src/services/csvService.ts` (email format check, in-file duplicate-name skip), `src/services/csvService.test.ts` (+1 case), this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR; #35-#38 all merged).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 136/136 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: duplicates against members already in the database are still not checked on import (needs a unique constraint or pre-query; owner decision). Other outstanding items unchanged.
 
 ### 2026-11-13 (Africa/Lagos) — branch claude/dev-2026-11-13
 - Changed: `src/services/csvService.ts` (+`sanitizeMemberRows`), `src/services/csvService.test.ts` (+2 cases), `src/app/members/page.tsx` (empty-import alert, log insert error), this file.
