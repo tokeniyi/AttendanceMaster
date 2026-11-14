@@ -5,15 +5,20 @@ import { Member, AttendanceRecord } from '../types';
  * Normalise raw CSV rows into insertable member rows. Only known columns are kept
  * (unknown/extra columns such as `id` or `owner_id` are dropped so an uploaded file
  * cannot set arbitrary fields), values are trimmed, rows without a full_name are skipped,
- * and `aliases` (separated by `;` or `|`) become a string array.
+ * malformed emails are dropped, duplicate names (case-insensitive) are skipped, and `aliases` (separated by `;` or `|`) become a string array.
  */
 export function sanitizeMemberRows(rows: Record<string, unknown>[]): Partial<Member>[] {
   const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
   const out: Partial<Member>[] = [];
+  const seen = new Set<string>();
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
     const full_name = str(row.full_name);
     if (!full_name) continue;
+    // Skip duplicate names within the same file (case/whitespace-insensitive).
+    const key = full_name.toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(key)) continue;
+    seen.add(key);
     const member: Partial<Member> = {
       full_name,
       aliases: str(row.aliases).split(/[;|]/).map(a => a.trim()).filter(Boolean),
@@ -21,7 +26,8 @@ export function sanitizeMemberRows(rows: Record<string, unknown>[]): Partial<Mem
     const department = str(row.department);
     const email = str(row.email);
     if (department) member.department = department;
-    if (email) member.email = email;
+    // Drop malformed emails rather than storing junk.
+    if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) member.email = email;
     out.push(member);
   }
   return out;

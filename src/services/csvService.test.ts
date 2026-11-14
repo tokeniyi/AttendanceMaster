@@ -31,4 +31,17 @@ describe("sanitizeMemberRows", () => {
       { full_name: "Bo", aliases: [] },
     ]);
   });
+
+  it("drops malformed emails and de-duplicates names case-insensitively", () => {
+    expect(
+      sanitizeMemberRows([
+        { full_name: "Ada Obi", email: "not-an-email" },
+        { full_name: "ada  obi", email: "ada@x.org" },
+        { full_name: "Bo", email: "bo@x.org" },
+      ])
+    ).toEqual([
+      { full_name: "Ada Obi", aliases: [] },
+      { full_name: "Bo", aliases: [], email: "bo@x.org" },
+    ]);
+  });
 });
