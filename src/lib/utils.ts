@@ -6,7 +6,9 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatConfidence(score: number): string {
-  return `${Math.round(score * 100)}%`;
+  if (!Number.isFinite(score)) return '0%';
+  const pct = Math.round(Math.min(1, Math.max(0, score)) * 100);
+  return `${pct}%`;
 }
 
 export function getStatusColor(status: string) {
