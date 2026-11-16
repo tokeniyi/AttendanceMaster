@@ -34,6 +34,7 @@
 - Member CSV import: malformed emails are dropped and duplicate names within a file are skipped (`sanitizeMemberRows`) (2026-11-14).
 
 - `formatConfidence` clamps to 0–100% and never renders NaN/Infinity; new `src/lib/utils.test.ts` (2026-11-15).
+- Test coverage: `findBoundaries` (table segmenter) exported and covered by `src/lib/tableSegmenter.test.ts` (4 cases) (2026-11-16).
 
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
@@ -46,6 +47,12 @@
 - Large items still needing a plan: #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-16 (Africa/Lagos) — branch claude/dev-2026-11-16
+- Changed: `src/lib/tableSegmenter.ts` (`findBoundaries` now exported, no behaviour change), new `src/lib/tableSegmenter.test.ts`, this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 145/145 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: note `findBoundaries` on an empty profile returns `[0, -1]` (callers never pass size 0). Outstanding items unchanged (all need owner decisions).
 
 ### 2026-11-15 (Africa/Lagos) — branch claude/dev-2026-11-15
 - Changed: `src/lib/utils.ts` (`formatConfidence` guards non-finite and out-of-range scores), new `src/lib/utils.test.ts` (5 cases), this file.
