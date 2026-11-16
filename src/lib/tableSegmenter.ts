@@ -220,7 +220,7 @@ function loadImage(source: string | File | Blob): Promise<HTMLImageElement> {
  * Find boundaries (start/end of content bands) in a projection profile.
  * Returns the pixel positions where bands begin and end.
  */
-function findBoundaries(
+export function findBoundaries(
   proj: Float32Array,
   size: number,
   threshold: number,
