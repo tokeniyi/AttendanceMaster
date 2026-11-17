@@ -35,6 +35,7 @@
 
 - `formatConfidence` clamps to 0–100% and never renders NaN/Infinity; new `src/lib/utils.test.ts` (2026-11-15).
 - Test coverage: `findBoundaries` (table segmenter) exported and covered by `src/lib/tableSegmenter.test.ts` (4 cases) (2026-11-16).
+- Backlog #31: README rewritten to match the code (table/function list, bucket setup, Node 22, no shadcn, export behaviour, correction learning marked inactive, privacy claim softened because `eng.traineddata` is fetched from tesseract.js's default CDN, architecture section) (2026-11-17).
 
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
@@ -43,10 +44,17 @@
 - Next small candidate: #38 (version strings: package.json 0.1.0 vs Sidebar v1.1.0; owner should pick the canonical version).
 - Local `npm run build` fails offline (next/font cannot fetch Inter from Google Fonts); rely on the Test workflow for build.
 - #13: plan written and validated (docs/plans/members-corrections-rls.md); owner must confirm per-user vs shared roster, then Stage 1 (add nullable `owner_id` default `auth.uid()` to members/corrections in schema.sql) can start. Do not ship Stage 3 (tight policies) before the owner backfills.
+- Finding: tesseract `eng.traineddata` is not in `public/tesseract/` and no `langPath` is set, so it downloads from a CDN at runtime (offline use fails). Owner decides: commit the file and set `langPath`, or keep the CDN.
 - Finding: `upsert_correction` is never called by the app, so the corrections table is never written (correction learning is dormant). Owner to decide implement vs remove (README claim, #31).
 - Large items still needing a plan: #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-17 (Africa/Lagos) — branch claude/dev-2026-11-17
+- Changed: `README.md` (backlog #31), `docs/MAINTENANCE.md` (#31 marked done), this file. Docs-only.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR; all prior PRs merged).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` and `npx tsc --noEmit` 145/145 tests passed, tsc clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: traineddata CDN dependency (see Outstanding). Other outstanding items unchanged (all need owner decisions).
 
 ### 2026-11-16 (Africa/Lagos) — branch claude/dev-2026-11-16
 - Changed: `src/lib/tableSegmenter.ts` (`findBoundaries` now exported, no behaviour change), new `src/lib/tableSegmenter.test.ts`, this file.
