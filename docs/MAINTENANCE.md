@@ -412,7 +412,7 @@ include never-rendered PII columns.
 
 ### P3 — Nice-to-have
 
-**31. Rewrite `README.md`** — correct the table list, drop the shadcn reference, correct the
+**31. Rewrite `README.md`** — ✅ DONE (2026-11-17; README now matches code: tables, export, correction-learning status, privacy wording, architecture) — correct the table list, drop the shadcn reference, correct the
 export instructions, either implement or delete the correction-learning claim, soften the privacy
 claim until `.traineddata` is committed, and add an architecture section describing the 4-phase
 pipeline, the storage-key decision, and the RLS ownership model.
