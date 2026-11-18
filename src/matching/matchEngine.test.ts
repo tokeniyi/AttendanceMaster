@@ -255,4 +255,17 @@ describe("matchMembers", () => {
     const [result] = matchMembers(["Ada Lovelace"], [grace], []);
     expect(result.status).toBe("none");
   });
+
+  it("treats stray OCR whitespace and case as an exact match", () => {
+    const [result] = matchMembers(["  ada   LOVELACE \n"], roster, []);
+    expect(result.suggestedMember?.id).toBe(ada.id);
+    expect(result.status).toBe("exact");
+  });
+
+  it("does not throw when a member's aliases column is NULL", () => {
+    const nullAliases = { ...grace, aliases: null as unknown as string[] };
+    const [result] = matchMembers(["Grace Hopper"], [nullAliases], []);
+    expect(result.suggestedMember?.id).toBe(grace.id);
+    expect(result.status).toBe("exact");
+  });
 });

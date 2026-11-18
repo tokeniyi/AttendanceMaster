@@ -62,7 +62,8 @@ export function matchMembers(
   });
 
   return ocrNames.map(ocrName => {
-    const lowerName = ocrName.toLowerCase();
+    // Normalise stray OCR whitespace so "Ada  Lovelace " still hits an exact match.
+    const lowerName = ocrName.trim().replace(/\s+/g, ' ').toLowerCase();
 
     // 0. Check for exact match first (most reliable).
     //
@@ -78,8 +79,9 @@ export function matchMembers(
     // can own a given id).
     const idIsCandidate = lowerName.length >= MIN_ID_MATCH_LENGTH;
     const exactMatch = members.find(
-      m => m.full_name.toLowerCase() === lowerName ||
-           m.aliases.some(a => a.toLowerCase() === lowerName) ||
+      m => m.full_name.trim().replace(/\s+/g, ' ').toLowerCase() === lowerName ||
+           // `aliases` may be NULL in the database if inserted explicitly (DEFAULT only covers omission).
+           (m.aliases ?? []).some(a => a.trim().replace(/\s+/g, ' ').toLowerCase() === lowerName) ||
            (idIsCandidate && m.id.toLowerCase() === lowerName)
     );
     if (exactMatch) {
