@@ -38,6 +38,8 @@ const MIN_ID_MATCH_LENGTH = 6;
  */
 const MIN_FUZZY_MATCH_LENGTH = 3;
 
+const normalise = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
+
 export function matchMembers(
   ocrNames: string[],
   members: Member[],
@@ -58,7 +60,10 @@ export function matchMembers(
   // Map corrections for quick lookup
   const correctionsMap = new Map<string, string>();
   pastCorrections.forEach(c => {
-    correctionsMap.set(c.incorrect_text.toLowerCase(), c.corrected_member_id);
+    // Same normalisation as the lookup key below, so stored text with stray
+    // whitespace/case differences still matches; skip rows with NULL text.
+    if (!c.incorrect_text) return;
+    correctionsMap.set(normalise(c.incorrect_text), c.corrected_member_id);
   });
 
   return ocrNames.map(ocrName => {

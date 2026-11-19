@@ -268,4 +268,20 @@ describe("matchMembers", () => {
     expect(result.suggestedMember?.id).toBe(grace.id);
     expect(result.status).toBe("exact");
   });
+
+  describe("learned corrections", () => {
+    const corr = (incorrect_text: string) =>
+      ({ id: "c1", incorrect_text, corrected_member_id: grace.id } as never);
+
+    it("matches a correction regardless of stray whitespace and case", () => {
+      const [result] = matchMembers(["  zq   xv "], roster, [corr("ZQ XV  ")]);
+      expect(result.status).toBe("correction");
+      expect(result.suggestedMember?.id).toBe(grace.id);
+    });
+
+    it("ignores corrections with NULL text instead of throwing", () => {
+      const [result] = matchMembers(["zq xv"], roster, [corr(null as unknown as string)]);
+      expect(result.status).toBe("none");
+    });
+  });
 });
