@@ -38,6 +38,7 @@
 - Backlog #31: README rewritten to match the code (table/function list, bucket setup, Node 22, no shadcn, export behaviour, correction learning marked inactive, privacy claim softened because `eng.traineddata` is fetched from tesseract.js's default CDN, architecture section) (2026-11-17).
 - `matchMembers` exact-match step now normalises whitespace/case on both sides and tolerates NULL `aliases` (previously a NULL aliases row threw and failed the whole scan) (2026-11-18).
 - `matchMembers` learned-corrections lookup now normalises whitespace/case on stored text (same as the OCR key) and skips NULL `incorrect_text` rows (2026-11-19).
+- Member CSV import now skips names already in the roster (`excludeExistingMembers`, case/space-insensitive) and resets the file input so the same file can be re-picked; alerts when nothing new (2026-11-20).
 
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
@@ -51,6 +52,12 @@
 - Large items still needing a plan: #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-20 (Africa/Lagos) — branch claude/dev-2026-11-20
+- Changed: `src/services/csvService.ts` (+`excludeExistingMembers`), `src/app/members/page.tsx`, `src/services/csvService.test.ts` (+2 cases), this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 151/151 passed; `npx tsc --noEmit` clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: nothing new; the roster is not unique-constrained by name in schema.sql (owner could add a unique index on lower(full_name) per owner once #13 decides per-user vs shared roster).
 
 ### 2026-11-19 (Africa/Lagos) — branch claude/dev-2026-11-19
 - Changed: `src/matching/matchEngine.ts` (correction map keys normalised, NULL text skipped), `src/matching/matchEngine.test.ts` (+2 cases), this file.
