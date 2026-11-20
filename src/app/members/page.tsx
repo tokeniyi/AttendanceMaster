@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Member } from "@/types";
-import { parseMemberCSV } from "@/services/csvService";
+import { parseMemberCSV, excludeExistingMembers } from "@/services/csvService";
 
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -42,8 +42,13 @@ export default function MembersPage() {
         alert('No valid rows found. The CSV needs a header row with a full_name column.');
         return;
       }
+      const fresh = excludeExistingMembers(data, members);
+      if (fresh.length === 0) {
+        alert('Every name in this file is already in the roster; nothing was imported.');
+        return;
+      }
       // Map data and insert to Supabase
-      const { error } = await supabase.from('members').insert(data);
+      const { error } = await supabase.from('members').insert(fresh);
       if (error) {
         console.error(error);
         alert('Import failed: ' + error.message);
@@ -53,6 +58,7 @@ export default function MembersPage() {
     } catch (err) {
       console.error(err);
     } finally {
+      e.target.value = '';
       setIsUploading(false);
     }
   }

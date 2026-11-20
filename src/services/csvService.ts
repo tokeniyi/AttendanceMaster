@@ -33,6 +33,20 @@ export function sanitizeMemberRows(rows: Record<string, unknown>[]): Partial<Mem
   return out;
 }
 
+/**
+ * Drop import rows whose name (case/whitespace-insensitive) already exists in the
+ * roster, so re-uploading the same CSV does not duplicate every member and split
+ * fuzzy matches between identical names.
+ */
+export function excludeExistingMembers(
+  rows: Partial<Member>[],
+  existing: Pick<Member, 'full_name'>[]
+): Partial<Member>[] {
+  const norm = (n: string) => n.trim().replace(/\s+/g, ' ').toLowerCase();
+  const have = new Set(existing.map(m => norm(m.full_name ?? '')));
+  return rows.filter(r => !have.has(norm(r.full_name ?? '')));
+}
+
 export function parseMemberCSV(file: File): Promise<Partial<Member>[]> {
   return new Promise((resolve, reject) => {
     Papa.parse<Record<string, unknown>>(file, {

@@ -45,3 +45,17 @@ describe("sanitizeMemberRows", () => {
     ]);
   });
 });
+
+import { excludeExistingMembers } from './csvService';
+describe('excludeExistingMembers', () => {
+  it('drops rows already in the roster, ignoring case and spacing', () => {
+    const out = excludeExistingMembers(
+      [{ full_name: 'Ada  Lovelace' }, { full_name: 'New Person' }],
+      [{ full_name: 'ada lovelace' }]
+    );
+    expect(out).toEqual([{ full_name: 'New Person' }]);
+  });
+  it('keeps everything for an empty roster', () => {
+    expect(excludeExistingMembers([{ full_name: 'A B' }], [])).toHaveLength(1);
+  });
+});
