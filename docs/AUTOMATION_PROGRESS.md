@@ -40,6 +40,7 @@
 - `matchMembers` learned-corrections lookup now normalises whitespace/case on stored text (same as the OCR key) and skips NULL `incorrect_text` rows (2026-11-19).
 - Member CSV import now skips names already in the roster (`excludeExistingMembers`, case/space-insensitive) and resets the file input so the same file can be re-picked; alerts when nothing new (2026-11-20).
 - Test coverage: `connectedComponents`, `analyzeCellDensity`, `dilate`, `erode` in `computerVision.ts` now covered (10 new cases, incl. U-shape label merge and 4-connectivity); no bugs found (2026-11-21).
+- Test coverage: `correctCellText`, `validateRow`, `validateDocument` (previously untested) covered by new `src/lib/dataCorrector.cells.test.ts` (14 cases); no bugs found (2026-11-22).
 
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
@@ -50,9 +51,16 @@
 - #13: plan written and validated (docs/plans/members-corrections-rls.md); owner must confirm per-user vs shared roster, then Stage 1 (add nullable `owner_id` default `auth.uid()` to members/corrections in schema.sql) can start. Do not ship Stage 3 (tight policies) before the owner backfills.
 - Finding: tesseract `eng.traineddata` is not in `public/tesseract/` and no `langPath` is set, so it downloads from a CDN at runtime (offline use fails). Owner decides: commit the file and set `langPath`, or keep the CDN.
 - Finding: `upsert_correction` is never called by the app, so the corrections table is never written (correction learning is dormant). Owner to decide implement vs remove (README claim, #31).
+- Finding: `validateDocument` (dataCorrector.ts) is exported but not used anywhere in the app; owner may remove or wire it in. Its `outlierRowIndices` index into data rows (headers excluded), not the original row array.
 - Large items still needing a plan: #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-22 (Africa/Lagos) — branch claude/dev-2026-11-22
+- Changed: new `src/lib/dataCorrector.cells.test.ts` (+14 cases), this file. Tests only; no production code changed.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR).
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` and `npx tsc --noEmit` run (see PR); `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: `validateDocument` unused in app; all other outstanding items need owner decisions.
 
 ### 2026-11-21 (Africa/Lagos) — branch claude/dev-2026-11-21
 - Changed: `src/lib/computerVision.test.ts` (+10 cases), this file. Tests only; no production code changed.
