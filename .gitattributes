@@ -26,3 +26,6 @@
 *.pdf  binary
 *.zip  binary
 *.gz   binary
+
+# Vendored OCR engine/model assets — never touch their bytes
+public/tesseract/** -text

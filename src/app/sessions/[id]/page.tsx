@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useTransition } from "react";
+import { useState, useEffect, useRef, useMemo, useTransition, useCallback, memo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   CheckCircle2, ChevronLeft, Maximize2, Minimize2, Zap, UserCheck,
@@ -34,6 +34,82 @@ const CellInput = ({ initialValue, onChange, isHeader }: { initialValue: string,
     />
   );
 };
+
+
+/**
+ * One spreadsheet row. Memoized so moving focus (arrow keys/clicks) or editing a
+ * cell re-renders only the rows whose data or focus actually changed, instead of
+ * the entire table on every keystroke.
+ */
+const SessionRow = memo(function SessionRow({
+  row, rIdx, numCols, isFocused, showDebug, onFocus, onEdit,
+}: {
+  row: MatchResult;
+  rIdx: number;
+  numCols: number;
+  isFocused: boolean;
+  showDebug: boolean;
+  onFocus: (idx: number) => void;
+  onEdit: (rowIdx: number, colIdx: number, value: string) => void;
+}) {
+  const cells = row.columns ?? [row.ocrName];
+  const padded = Array.from({ length: numCols }, (_, i) => cells[i] ?? '');
+  return (
+                    <tr
+                      onClick={() => onFocus(rIdx)}
+                      className={cn(
+                        "border-b border-white/[0.04] cursor-pointer transition-colors relative",
+                        isFocused ? "bg-primary/[0.06]" : "hover:bg-white/[0.02]",
+                        row.isHeader ? "bg-white/[0.04]" : "",
+                        row.region === 'title' || row.region === 'metadata' ? "bg-violet-500/5" : "",
+                        row.region === 'footer' ? "bg-amber-500/5" : "",
+                        row.status === 'approved' ? "opacity-55" : "",
+                        row.status === 'flagged' ? "border-l-2 border-rose-500" : ""
+                      )}
+                    >
+                      <td className="text-center border-r border-white/5 py-2 font-mono text-muted-foreground text-[9px] relative">
+                        {isFocused && <div className="absolute left-0 top-0 w-0.5 h-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]" />}
+                        {rIdx + 1}
+                      </td>
+                      {padded.map((cellVal, cIdx) => {
+                        const isSuppressed = showDebug && row.emptyCells?.[cIdx];
+                        return (
+                          <td 
+                            key={cIdx} 
+                            className={cn(
+                              "border-r border-white/[0.04] py-1 px-1 transition-all",
+                              isSuppressed && "bg-rose-500/10 border-rose-500/20 relative overflow-hidden"
+                            )}
+                          >
+                            {isSuppressed && <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGcgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTAgMjBMMjAgMCIvPjwvZz48L3N2Zz4=')] opacity-50" />}
+                            <CellInput
+                              initialValue={cellVal}
+                            onChange={val => onEdit(rIdx, cIdx, val)}
+                            isHeader={row.isHeader}
+                          />
+                        </td>
+                        );
+                      })}
+                      <td className="px-3 border-r border-white/5 py-1">
+                        {!row.isHeader && (
+                          <div className="flex items-center gap-1.5">
+                            <UserCheck className={cn("h-3 w-3 shrink-0", row.suggestedMember ? "text-emerald-500" : "text-white/20")} />
+                            <span className={cn("text-[9px] font-bold truncate", row.suggestedMember ? "text-emerald-400" : "text-white/30 italic")}>
+                              {row.suggestedMember?.full_name ?? "Unassigned"}
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="text-center py-1">
+                        <div className={cn(
+                          "w-2 h-2 rounded-full mx-auto",
+                          row.status === 'approved' ? "bg-emerald-500 shadow-[0_0_6px_#10b981]" :
+                          row.status === 'flagged' ? "bg-rose-500" : "bg-white/10"
+                        )} />
+                      </td>
+                    </tr>
+  );
+});
 
 export default function SessionWorkspace() {
   const { id } = useParams();
@@ -150,6 +226,11 @@ export default function SessionWorkspace() {
     });
     pushHistory(nd);
   };
+
+  // Stable identity for the memoized rows; always calls the latest editCell.
+  const editCellRef = useRef(editCell);
+  editCellRef.current = editCell;
+  const stableEditCell = useCallback((r: number, c: number, v: string) => editCellRef.current(r, c, v), []);
 
   const assignMember = (rowIdx: number, memberId: string) => {
     const member = members.find(m => m.id === memberId) ?? null;
@@ -458,68 +539,18 @@ export default function SessionWorkspace() {
                 </tr>
               </thead>
               <tbody>
-                {tableData.map((row, rIdx) => {
-                  const cells = row.columns ?? [row.ocrName];
-                  // Pad to numCols
-                  const padded = Array.from({ length: numCols }, (_, i) => cells[i] ?? '');
-                  const isFocused = focusedRowIdx === rIdx;
-                  return (
-                    <tr
-                      key={rIdx}
-                      onClick={() => setFocusedRowIdx(rIdx)}
-                      className={cn(
-                        "border-b border-white/[0.04] cursor-pointer transition-colors relative",
-                        isFocused ? "bg-primary/[0.06]" : "hover:bg-white/[0.02]",
-                        row.isHeader ? "bg-white/[0.04]" : "",
-                        row.region === 'title' || row.region === 'metadata' ? "bg-violet-500/5" : "",
-                        row.region === 'footer' ? "bg-amber-500/5" : "",
-                        row.status === 'approved' ? "opacity-55" : "",
-                        row.status === 'flagged' ? "border-l-2 border-rose-500" : ""
-                      )}
-                    >
-                      <td className="text-center border-r border-white/5 py-2 font-mono text-muted-foreground text-[9px] relative">
-                        {isFocused && <div className="absolute left-0 top-0 w-0.5 h-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]" />}
-                        {rIdx + 1}
-                      </td>
-                      {padded.map((cellVal, cIdx) => {
-                        const isSuppressed = showDebug && row.emptyCells?.[cIdx];
-                        return (
-                          <td 
-                            key={cIdx} 
-                            className={cn(
-                              "border-r border-white/[0.04] py-1 px-1 transition-all",
-                              isSuppressed && "bg-rose-500/10 border-rose-500/20 relative overflow-hidden"
-                            )}
-                          >
-                            {isSuppressed && <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGcgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTAgMjBMMjAgMCIvPjwvZz48L3N2Zz4=')] opacity-50" />}
-                            <CellInput
-                              initialValue={cellVal}
-                            onChange={val => editCell(rIdx, cIdx, val)}
-                            isHeader={row.isHeader}
-                          />
-                        </td>
-                        );
-                      })}
-                      <td className="px-3 border-r border-white/5 py-1">
-                        {!row.isHeader && (
-                          <div className="flex items-center gap-1.5">
-                            <UserCheck className={cn("h-3 w-3 shrink-0", row.suggestedMember ? "text-emerald-500" : "text-white/20")} />
-                            <span className={cn("text-[9px] font-bold truncate", row.suggestedMember ? "text-emerald-400" : "text-white/30 italic")}>
-                              {row.suggestedMember?.full_name ?? "Unassigned"}
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="text-center py-1">
-                        <div className={cn(
-                          "w-2 h-2 rounded-full mx-auto",
-                          row.status === 'approved' ? "bg-emerald-500 shadow-[0_0_6px_#10b981]" :
-                          row.status === 'flagged' ? "bg-rose-500" : "bg-white/10"
-                        )} />
-                      </td>
-                    </tr>
-                  );
-                })}
+                {tableData.map((row, rIdx) => (
+                  <SessionRow
+                    key={rIdx}
+                    row={row}
+                    rIdx={rIdx}
+                    numCols={numCols}
+                    isFocused={focusedRowIdx === rIdx}
+                    showDebug={showDebug}
+                    onFocus={setFocusedRowIdx}
+                    onEdit={stableEditCell}
+                  />
+                ))}
               </tbody>
             </table>
           </div>

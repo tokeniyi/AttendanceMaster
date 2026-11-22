@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { performOCR } from './ocrService';
+import { performOCR, prewarmOCR, shutdownOCR } from './ocrService';
 
 vi.mock('@/lib/tableSegmenter', () => ({
   detectTableGrid: vi.fn().mockResolvedValue({
@@ -8,11 +8,12 @@ vi.mock('@/lib/tableSegmenter', () => ({
     colBoundaries: [0, 10],
     isInverted: false,
   }),
+  loadImage: vi.fn().mockResolvedValue({ naturalWidth: 10, naturalHeight: 10 }),
   renderToCanvas: vi.fn().mockResolvedValue({
     getContext: () => ({ drawImage: vi.fn() }),
   }),
   extractCellImage: vi.fn().mockReturnValue({
-    dataUrl: 'data:image/png;base64,abc',
+    image: { width: 10, height: 10 },
     analysis: { isEmpty: false },
   }),
 }));
@@ -83,5 +84,45 @@ describe('performOCR correction contract', () => {
     const result = await performOCR('data:image/png;base64,abc', undefined);
     expect(validateRow).toHaveBeenCalled();
     expect(result[0].text).toBe('Ada Lovelace');
+  });
+});
+
+describe('OCR worker pool', () => {
+  it('reuses warm workers across scans instead of recreating them', async () => {
+    const { createWorker } = await import('tesseract.js');
+    await shutdownOCR();
+    (createWorker as any).mockClear();
+
+    await performOCR('data:image/png;base64,abc');
+    const afterFirst = (createWorker as any).mock.calls.length;
+    expect(afterFirst).toBeGreaterThan(0);
+
+    await performOCR('data:image/png;base64,abc');
+    expect((createWorker as any).mock.calls.length).toBe(afterFirst);
+    await shutdownOCR();
+  });
+
+  it('loads the self-hosted LSTM model and cores', async () => {
+    const { createWorker } = await import('tesseract.js');
+    await shutdownOCR();
+    (createWorker as any).mockClear();
+    prewarmOCR();
+    await performOCR('data:image/png;base64,abc');
+    const [lang, oem, opts] = (createWorker as any).mock.calls[0];
+    expect(lang).toBe('eng');
+    expect(oem).toBe(1);
+    expect(opts).toMatchObject({ corePath: '/tesseract', langPath: '/tesseract/lang', workerBlobURL: false });
+    await shutdownOCR();
+  });
+
+  it('rebuilds the pool after a failed worker start', async () => {
+    const { createWorker } = await import('tesseract.js');
+    await shutdownOCR();
+    (createWorker as any).mockClear();
+    (createWorker as any).mockImplementationOnce(() => Promise.reject(new Error('wasm failed')));
+    await expect(performOCR('data:image/png;base64,abc')).rejects.toThrow('wasm failed');
+    const result = await performOCR('data:image/png;base64,abc');
+    expect(result[0].text).toBe('Ada Lovelace');
+    await shutdownOCR();
   });
 });

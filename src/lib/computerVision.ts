@@ -24,13 +24,13 @@ export interface CellAnalysis {
  * Handles inverted images (dark background, light text) automatically via Otsu-like heuristic
  * or simple thresholding.
  */
-export function binarize(imageData: ImageData, isInverted = false): Uint8Array {
+export function binarize(imageData: ImageData, isInverted = false, threshold?: number): Uint8Array {
   const { width, height, data } = imageData;
   const size = width * height;
   const bin = new Uint8Array(size);
 
-  // Simple grayscale + threshold
-  const THRESH = isInverted ? 100 : 160;
+  // Grayscale + threshold (caller may supply an adaptive one, e.g. Otsu).
+  const THRESH = threshold ?? (isInverted ? 100 : 160);
   
   for (let i = 0; i < size; i++) {
     const r = data[i * 4];
@@ -248,4 +248,72 @@ export function erode(bin: Uint8Array, w: number, h: number, kx: number, ky: num
     }
   }
   return out;
+}
+
+/**
+ * Otsu's method: the grey level that maximises between-class variance of a
+ * 256-bin luminance histogram. Adapts the ink/paper cut to each cell, so faint
+ * pencil, shadows and uneven phone-camera lighting binarize cleanly where a
+ * fixed threshold either drops strokes or floods the cell with noise.
+ *
+ * Returns `fallback` when the histogram is (near) uniform — a blank cell has no
+ * meaningful split and Otsu would otherwise amplify sensor noise into "ink".
+ */
+export function otsuThreshold(hist: ArrayLike<number>, fallback = 140, minSpread = 40): number {
+  let total = 0;
+  let sum = 0;
+  let lo = -1;
+  let hi = -1;
+  for (let i = 0; i < 256; i++) {
+    const n = hist[i] || 0;
+    if (n > 0) {
+      if (lo < 0) lo = i;
+      hi = i;
+    }
+    total += n;
+    sum += i * n;
+  }
+  if (total === 0 || hi - lo < minSpread) return fallback;
+
+  let sumB = 0;
+  let wB = 0;
+  let best = 0;
+  let threshold = fallback;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t] || 0;
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+    sumB += t * (hist[t] || 0);
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > best) {
+      best = between;
+      threshold = t;
+    }
+  }
+  // Pixels <= threshold are ink; +1 so the comparison used by callers (`< t`) matches.
+  return threshold + 1;
+}
+
+/**
+ * Picks the upscale factor for a cell crop so its height lands near the size
+ * Tesseract's LSTM model reads best (~20-30px glyphs). Small cells from a
+ * screenshot are enlarged; tall cells from a 12MP photo are left alone instead
+ * of being blown up 3x, which only multiplied OCR time.
+ */
+export function cellScaleFactor(cellHeight: number, targetHeight = 72, maxScale = 3): number {
+  if (cellHeight <= 0) return 1;
+  return Math.min(maxScale, Math.max(1, targetHeight / cellHeight));
+}
+
+/** 256-bin luminance histogram of an RGBA buffer, sampling every `step`-th pixel. */
+export function luminanceHistogram(imageData: ImageData, step = 1): Uint32Array {
+  const { data } = imageData;
+  const hist = new Uint32Array(256);
+  for (let p = 0; p < data.length; p += 4 * step) {
+    hist[(0.2126 * data[p] + 0.7152 * data[p + 1] + 0.0722 * data[p + 2]) | 0]++;
+  }
+  return hist;
 }

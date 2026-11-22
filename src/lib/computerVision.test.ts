@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { otsuThreshold, cellScaleFactor } from './computerVision';
 import {
   detectInverted,
   binarize,
@@ -119,5 +120,44 @@ describe('dilate / erode', () => {
     const out = erode(block.bin, block.w, block.h, 3, 3);
     expect(Array.from(out).reduce((a, b) => a + b, 0)).toBe(1);
     expect(out[2 * 5 + 2]).toBe(1);
+  });
+});
+
+
+describe('otsuThreshold', () => {
+  it('splits a bimodal ink/paper histogram between the two peaks', () => {
+    const hist = new Array(256).fill(0);
+    hist[30] = 200;  // ink
+    hist[220] = 800; // paper
+    const t = otsuThreshold(hist);
+    expect(t).toBeGreaterThan(30);
+    expect(t).toBeLessThanOrEqual(220);
+  });
+
+  it('adapts to a dim photo where a fixed cut would fail', () => {
+    const hist = new Array(256).fill(0);
+    hist[60] = 100;  // ink
+    hist[130] = 900; // grey, poorly-lit paper (below the old fixed 140 cut)
+    const t = otsuThreshold(hist);
+    expect(t).toBeGreaterThan(60);
+    expect(t).toBeLessThanOrEqual(130);
+  });
+
+  it('returns the fallback for a near-uniform (blank) cell', () => {
+    const hist = new Array(256).fill(0);
+    hist[240] = 500;
+    hist[250] = 500;
+    expect(otsuThreshold(hist, 140)).toBe(140);
+  });
+});
+
+describe('cellScaleFactor', () => {
+  it('upscales small cells, capped at 3x', () => {
+    expect(cellScaleFactor(12)).toBe(3);
+    expect(cellScaleFactor(36)).toBe(2);
+  });
+  it('leaves already-large cells at native size', () => {
+    expect(cellScaleFactor(150)).toBe(1);
+    expect(cellScaleFactor(0)).toBe(1);
   });
 });

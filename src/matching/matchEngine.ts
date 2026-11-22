@@ -66,6 +66,26 @@ export function matchMembers(
     correctionsMap.set(normalise(c.incorrect_text), c.corrected_member_id);
   });
 
+  // Precomputed O(1) lookups. Previously every OCR line re-normalised every
+  // member's name and aliases (O(lines x members x aliases)).
+  const byName = new Map<string, Member>();
+  const byId = new Map<string, Member>();
+  for (const m of members) {
+    const key = normalise(m.full_name ?? '');
+    if (!byName.has(key)) byName.set(key, m);
+  }
+  for (const m of members) {
+    for (const a of m.aliases ?? []) {
+      const key = normalise(a);
+      // A full name always wins over another member's alias (first-match order preserved).
+      if (!byName.has(key)) byName.set(key, m);
+    }
+    byId.set(m.id.toLowerCase(), m);
+  }
+  const memberById = new Map(members.map(m => [m.id, m] as const));
+  // Fuzzy search is the expensive step; repeated OCR strings (e.g. "Present") hit the cache.
+  const fuzzyCache = new Map<string, ReturnType<typeof fuse.search>>();
+
   return ocrNames.map(ocrName => {
     // Normalise stray OCR whitespace so "Ada  Lovelace " still hits an exact match.
     const lowerName = ocrName.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -83,12 +103,9 @@ export function matchMembers(
     // safe version is whole-id equality, which is also total (at most one member
     // can own a given id).
     const idIsCandidate = lowerName.length >= MIN_ID_MATCH_LENGTH;
-    const exactMatch = members.find(
-      m => m.full_name.trim().replace(/\s+/g, ' ').toLowerCase() === lowerName ||
-           // `aliases` may be NULL in the database if inserted explicitly (DEFAULT only covers omission).
-           (m.aliases ?? []).some(a => a.trim().replace(/\s+/g, ' ').toLowerCase() === lowerName) ||
-           (idIsCandidate && m.id.toLowerCase() === lowerName)
-    );
+    const exactMatch =
+      byName.get(lowerName) ??
+      (idIsCandidate ? byId.get(lowerName) : undefined);
     if (exactMatch) {
       return {
         ocrName,
@@ -101,7 +118,7 @@ export function matchMembers(
     // 1. Check for learned corrections
     const correctedId = correctionsMap.get(lowerName);
     if (correctedId) {
-      const member = members.find(m => m.id === correctedId);
+      const member = memberById.get(correctedId);
       if (member) {
         return {
           ocrName,
@@ -118,9 +135,12 @@ export function matchMembers(
     // against a long name than a genuinely misread real name does, so a
     // confidence floor would reject the real matches and keep the junk. See
     // MIN_FUZZY_MATCH_LENGTH.
-    const results = lowerName.length >= MIN_FUZZY_MATCH_LENGTH
-      ? fuse.search(ocrName)
-      : [];
+    let results: ReturnType<typeof fuse.search> = [];
+    if (lowerName.length >= MIN_FUZZY_MATCH_LENGTH) {
+      const cached = fuzzyCache.get(lowerName);
+      results = cached ?? fuse.search(ocrName);
+      if (!cached) fuzzyCache.set(lowerName, results);
+    }
     if (results.length > 0) {
       const bestMatch = results[0];
       return {
