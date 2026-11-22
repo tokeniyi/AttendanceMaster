@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Upload, Database, ArrowRight, Zap, FileImage, CheckCircle2, AlertCircle } from "lucide-react";
-import { performOCR } from "@/OCR/ocrService";
+import { Upload, Database, ArrowRight, Zap, FileImage, CheckCircle2, AlertCircle, Cpu, Clipboard } from "lucide-react";
+import { performOCR, prewarmOCR } from "@/OCR/ocrService";
 import { matchMembers } from "@/matching/matchEngine";
 import { mergeMatchedRows } from "@/services/sessionRows";
 import { supabase } from "@/lib/supabase";
@@ -22,6 +22,7 @@ export default function NewAttendancePage() {
   const [eventName, setEventName] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [engineState, setEngineState] = useState<"loading" | "ready" | "error">("loading");
   const inputRef = useRef<HTMLInputElement>(null);
   // Object URL backing the preview. It must outlive processFile (the preview is
   // still displayed after an error), so it is revoked on replacement/unmount only.
@@ -33,11 +34,22 @@ export default function NewAttendancePage() {
     };
   }, []);
 
+  // Load the OCR engine + pretrained model while the user picks a file, so the
+  // scan itself starts reading immediately instead of waiting on WASM start-up.
+  useEffect(() => {
+    let cancelled = false;
+    prewarmOCR().then(ok => { if (!cancelled) setEngineState(ok ? "ready" : "error"); });
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     async function loadData() {
       try {
-        const { data: m, error: mErr } = await supabase.from('members').select('id, full_name, aliases');
-        const { data: c, error: cErr } = await supabase.from('corrections').select('id, incorrect_text, corrected_member_id');
+        // Both roster queries are independent — run them concurrently.
+        const [{ data: m, error: mErr }, { data: c, error: cErr }] = await Promise.all([
+          supabase.from('members').select('id, full_name, aliases'),
+          supabase.from('corrections').select('id, incorrect_text, corrected_member_id'),
+        ]);
         if (mErr) throw mErr;
         if (cErr) throw cErr;
         if (m) setMembers(m);
@@ -183,6 +195,31 @@ export default function NewAttendancePage() {
     if (file) processFile(file);
   };
 
+  // Paste a screenshot straight from the clipboard (Ctrl/Cmd+V).
+  const processFileRef = useRef(processFile);
+  processFileRef.current = processFile;
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items ?? []).find(i => i.type.startsWith("image/"));
+      const file = item?.getAsFile();
+      if (file) {
+        e.preventDefault();
+        processFileRef.current(file);
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, []);
+
+  const stages = [
+    { label: "Layout", at: 0 },
+    { label: "Reading cells", at: 15 },
+    { label: "Validation", at: 92 },
+    { label: "Matching", at: 95 },
+    { label: "Saving", at: 98 },
+  ];
+  const activeStage = stages.reduce((acc, s, i) => (progressPct >= s.at ? i : acc), 0);
+
   return (
     <div className="max-w-3xl mx-auto space-y-10 py-12 px-4">
       {/* Hero */}
@@ -194,6 +231,19 @@ export default function NewAttendancePage() {
         <p className="text-muted-foreground text-base max-w-md mx-auto leading-relaxed">
           Upload your attendance register. The AI detects the grid, reads each cell independently, and builds a clean editable spreadsheet.
         </p>
+        <div
+          role="status"
+          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest ${
+            engineState === "ready"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
+              : engineState === "error"
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+                : "border-border bg-accent/30 text-muted-foreground"
+          }`}
+        >
+          <Cpu className={`h-3 w-3 ${engineState === "loading" ? "animate-pulse" : ""}`} />
+          {engineState === "ready" ? "OCR engine ready" : engineState === "error" ? "OCR engine will load on upload" : "Warming up OCR engine…"}
+        </div>
       </div>
 
       {/* Upload Card */}
@@ -260,8 +310,21 @@ export default function NewAttendancePage() {
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
-                <p className="text-[11px] font-bold text-muted-foreground animate-pulse">{progressMsg}</p>
+                <p className="text-[11px] font-bold text-muted-foreground animate-pulse" aria-live="polite">{progressMsg}</p>
               </div>
+
+              {/* Stage stepper */}
+              <ol className="flex flex-wrap justify-center gap-x-3 gap-y-2 text-[10px] font-bold uppercase tracking-wider">
+                {stages.map((s, i) => (
+                  <li
+                    key={s.label}
+                    className={`flex items-center gap-1.5 ${i < activeStage ? "text-emerald-500" : i === activeStage ? "text-primary" : "text-muted-foreground/50"}`}
+                  >
+                    {i < activeStage ? <CheckCircle2 className="h-3 w-3" /> : <span className={`h-1.5 w-1.5 rounded-full ${i === activeStage ? "bg-primary animate-pulse" : "bg-current"}`} />}
+                    {s.label}
+                  </li>
+                ))}
+              </ol>
 
               {/* Image preview */}
               {image && (
@@ -301,6 +364,9 @@ export default function NewAttendancePage() {
               <div className="space-y-2">
                 <h3 className="text-xl font-bold">Drop your register here</h3>
                 <p className="text-sm text-muted-foreground">PNG, JPG, JPEG — screenshots, scans, photos all supported</p>
+                <p className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/80">
+                  <Clipboard className="h-3 w-3" /> or paste a screenshot with Ctrl/⌘ + V
+                </p>
               </div>
               <div className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all">
                 <Upload className="h-4 w-4" /> Browse Files
@@ -313,13 +379,14 @@ export default function NewAttendancePage() {
       {/* Pipeline steps */}
       <div className="grid sm:grid-cols-3 gap-4">
         {[
-          { icon: Database, color: "blue", title: "1. Grid Detection", desc: "AI identifies table boundaries, row separators, and column gutters before OCR starts." },
-          { icon: Zap, color: "amber", title: "2. Cell-by-Cell OCR", desc: "Each cell is extracted individually and read at 3× scale for maximum accuracy." },
-          { icon: ArrowRight, color: "emerald", title: "3. Human Verification", desc: "You approve, correct, and finalize the structured table in an Excel-like workspace." },
-        ].map(({ icon: Icon, color, title, desc }) => (
+          // Full class names (not `bg-${color}-500`) so Tailwind actually generates them.
+          { icon: Database, tone: "bg-blue-500/10 text-blue-500", title: "1. Grid Detection", desc: "AI identifies table boundaries, row separators, and column gutters before OCR starts." },
+          { icon: Zap, tone: "bg-amber-500/10 text-amber-500", title: "2. Cell-by-Cell OCR", desc: "Each cell is cleaned with adaptive thresholding and read by Tesseract's pretrained LSTM model; weak reads get a second pass." },
+          { icon: ArrowRight, tone: "bg-emerald-500/10 text-emerald-500", title: "3. Human Verification", desc: "You approve, correct, and finalize the structured table in an Excel-like workspace." },
+        ].map(({ icon: Icon, tone, title, desc }) => (
           <div key={title} className="p-5 rounded-2xl border border-border bg-card/50 space-y-3">
-            <div className={`h-8 w-8 rounded-lg bg-${color}-500/10 flex items-center justify-center`}>
-              <Icon className={`h-4 w-4 text-${color}-500`} />
+            <div className={`h-8 w-8 rounded-lg ${tone} flex items-center justify-center`}>
+              <Icon className="h-4 w-4" />
             </div>
             <h4 className="text-xs font-black uppercase tracking-wide">{title}</h4>
             <p className="text-[11px] text-muted-foreground leading-relaxed">{desc}</p>
