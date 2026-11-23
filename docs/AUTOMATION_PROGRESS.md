@@ -41,6 +41,7 @@
 - Member CSV import now skips names already in the roster (`excludeExistingMembers`, case/space-insensitive) and resets the file input so the same file can be re-picked; alerts when nothing new (2026-11-20).
 - Test coverage: `connectedComponents`, `analyzeCellDensity`, `dilate`, `erode` in `computerVision.ts` now covered (10 new cases, incl. U-shape label merge and 4-connectivity); no bugs found (2026-11-21).
 - Test coverage: `correctCellText`, `validateRow`, `validateDocument` (previously untested) covered by new `src/lib/dataCorrector.cells.test.ts` (14 cases); no bugs found (2026-11-22).
+- History page: a failed `sessions` query now shows a "Could not load sessions" alert with Retry instead of the misleading "No sessions found" empty state (2026-11-23).
 
 ## Outstanding
 - #15 remainder: history page needs `suggested_table` only for a row count — add a `rows` count column or RPC before narrowing/paginating.
@@ -55,6 +56,12 @@
 - Large items still needing a plan: #2 (auth cookie split).
 
 ## Run log
+
+### 2026-11-23 (Africa/Lagos) — branch claude/dev-2026-11-23
+- Changed: `src/app/attendance/history/page.tsx` (error state + retry for failed fetch), this file.
+- Owner requests: none (issue #21 has no comments; no open claude/dev- PR). Open PR #48 is the owner's (claude/elegant-dirac-587mdz, OCR work); deliberately avoided OCR files to prevent conflicts.
+- Verification: `npm ci --legacy-peer-deps` OK; `npm test` 175/175 passed; `npx tsc --noEmit` clean; eslint on the changed file clean; `npm run build` NOT run locally (known offline Google Fonts failure) — relying on the Test workflow.
+- Found but not changed: outstanding items unchanged (all need owner decisions); after PR #48 merges, re-check OCR-related notes (e.g. the tesseract `eng.traineddata` CDN finding) as it self-hosts the model.
 
 ### 2026-11-22 (Africa/Lagos) — branch claude/dev-2026-11-22
 - Changed: new `src/lib/dataCorrector.cells.test.ts` (+14 cases), this file. Tests only; no production code changed.

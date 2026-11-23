@@ -26,6 +26,7 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSessions();
@@ -33,13 +34,20 @@ export default function SessionsPage() {
 
   async function fetchSessions() {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('sessions')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (data) setSessions(data);
-    setIsLoading(false);
+    setLoadError(null);
+    try {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      if (data) setSessions(data);
+    } catch (e) {
+      // Without this a failed query rendered the misleading "No sessions found" empty state.
+      setLoadError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   async function deleteSession(id: string, e: React.MouseEvent) {
@@ -175,7 +183,20 @@ export default function SessionsPage() {
           </Link>
         ))}
 
-        {filteredSessions.length === 0 && !isLoading && (
+        {loadError && !isLoading && (
+          <div role="alert" className="col-span-full rounded-2xl border border-rose-500/30 bg-rose-500/10 p-6 text-center">
+            <h3 className="text-lg font-medium text-rose-500">Could not load sessions</h3>
+            <p className="text-muted-foreground mt-1">{loadError}</p>
+            <button
+              onClick={() => fetchSessions()}
+              className="mt-4 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:bg-accent transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {filteredSessions.length === 0 && !isLoading && !loadError && (
           <div className="col-span-full py-20 text-center rounded-2xl border-2 border-dashed border-border">
             <HistoryIcon className="mx-auto h-12 w-12 text-muted-foreground/50" />
             <h3 className="mt-4 text-lg font-medium">No sessions found</h3>
